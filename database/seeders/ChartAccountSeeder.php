@@ -117,12 +117,114 @@ class ChartAccountSeeder extends Seeder
                 'cash_flow_category_id' => 1,
                 'equity_category_id' => null,
             ],
+            // Additional Fee Accounts
+            [
+                'account_code' => '4003',
+                'account_name' => 'Administrative Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4004',
+                'account_name' => 'Application Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4005',
+                'account_name' => 'Consultation Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4006',
+                'account_name' => 'Documentation Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4007',
+                'account_name' => 'Early Repayment Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4008',
+                'account_name' => 'Late Payment Penalty',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4009',
+                'account_name' => 'Processing Fee',
+                'account_class_group_id' => 10,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
 
             // Cash Deposit (Group ID: 5) - Customer operation account
             [
                 'account_code' => '2010',
                 'account_name' => 'Customer operation account',
                 'account_class_group_id' => 5,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            // Insurance Fee as Liability (Group ID: 6)
+            [
+                'account_code' => '2001',
+                'account_name' => 'Insurance Fee',
+                'account_class_group_id' => 6,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            // Write Off Accounts
+            [
+                'account_code' => '5001',
+                'account_name' => 'Direct Write Off Account',
+                'account_class_group_id' => 11,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '1004',
+                'account_name' => 'Using Provision Account',
+                'account_class_group_id' => 4,
+                'has_cash_flow' => 1,
+                'has_equity' => 0,
+                'cash_flow_category_id' => 1,
+                'equity_category_id' => null,
+            ],
+            [
+                'account_code' => '4010',
+                'account_name' => 'Income Provision Account',
+                'account_class_group_id' => 10,
                 'has_cash_flow' => 1,
                 'has_equity' => 0,
                 'cash_flow_category_id' => 1,
@@ -139,5 +241,6 @@ class ChartAccountSeeder extends Seeder
                 ])
             );
         }
+
     }
 }
