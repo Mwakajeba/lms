@@ -1,0 +1,5 @@
+customer_no,amount,period,interest,date_applied,interest_cycle,loan_officer,group_id,sector
+100001,1000000,12,5.5,2024-01-15,monthly,2,1,Agriculture
+100355,500000,6,4.0,2024-01-16,monthly,3,2,Business
+999999,750000,9,3.5,2024-01-17,monthly,2,1,Trade
+100356,300000,3,6.0,2024-01-18,monthly,3,2,Services
