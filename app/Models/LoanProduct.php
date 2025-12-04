@@ -89,6 +89,11 @@ class LoanProduct extends Model
         ];
     }
 
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
     /**
      * Get the principal receivable account for this loan product
      */

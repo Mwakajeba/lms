@@ -294,6 +294,12 @@ Route::prefix('settings')->name('settings.')->middleware(['auth', 'company.scope
     Route::get('/payment-voucher-approval', [SettingsController::class, 'paymentVoucherApprovalSettings'])->name('payment-voucher-approval');
     Route::put('/payment-voucher-approval', [SettingsController::class, 'updatePaymentVoucherApprovalSettings'])->name('payment-voucher-approval.update');
 
+    // Direct Loans Threshold Settings
+    Route::get('/direct-loans-threshold', [SettingsController::class, 'directLoansThresholdSettings'])->name('direct-loans-threshold');
+    Route::post('/direct-loans-threshold', [SettingsController::class, 'storeDirectLoansThreshold'])->name('direct-loans-threshold.store');
+    Route::put('/direct-loans-threshold/{threshold}', [SettingsController::class, 'updateDirectLoansThreshold'])->name('direct-loans-threshold.update');
+    Route::delete('/direct-loans-threshold/{threshold}', [SettingsController::class, 'destroyDirectLoansThreshold'])->name('direct-loans-threshold.destroy');
+
     // Bulk Email Settings (Super Admin only)
     Route::middleware(['role:super-admin'])->group(function () {
         Route::get('/bulk-email', [\App\Http\Controllers\BulkEmailController::class, 'index'])->name('bulk-email');

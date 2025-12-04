@@ -787,4 +787,50 @@ class SettingsController extends Controller
             return redirect()->route('settings.payment-voucher-approval')->with('error', 'Failed to update payment voucher approval settings: ' . $e->getMessage());
         }
     }
+
+    public function directLoansThresholdSettings()
+    {
+        $thresholds = \App\Models\DirectLoanThreshold::forCompany()->with('loanProduct')->paginate(10);
+        $loanProducts = \App\Models\LoanProduct::active()->get();
+
+        return view('settings.direct-loans-threshold', compact('thresholds', 'loanProducts'));
+    }
+
+    public function storeDirectLoansThreshold(Request $request)
+    {
+        $request->validate([
+            'loan_product_id' => 'required|exists:loan_products,id',
+            'max_amount' => 'required|numeric|min:0',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        \App\Models\DirectLoanThreshold::create([
+            'company_id' => current_company_id(),
+            'loan_product_id' => $request->loan_product_id,
+            'max_amount' => $request->max_amount,
+            'description' => $request->description,
+        ]);
+
+        return redirect()->route('settings.direct-loans-threshold')->with('success', 'Direct loan threshold added successfully!');
+    }
+
+    public function updateDirectLoansThreshold(Request $request, \App\Models\DirectLoanThreshold $threshold)
+    {
+        $request->validate([
+            'loan_product_id' => 'required|exists:loan_products,id',
+            'max_amount' => 'required|numeric|min:0',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        $threshold->update($request->only(['loan_product_id', 'max_amount', 'description']));
+
+        return redirect()->route('settings.direct-loans-threshold')->with('success', 'Direct loan threshold updated successfully!');
+    }
+
+    public function destroyDirectLoansThreshold(\App\Models\DirectLoanThreshold $threshold)
+    {
+        $threshold->delete();
+
+        return redirect()->route('settings.direct-loans-threshold')->with('success', 'Direct loan threshold deleted successfully!');
+    }
 }
