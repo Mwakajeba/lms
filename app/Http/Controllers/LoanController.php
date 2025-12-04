@@ -1244,6 +1244,17 @@ class LoanController extends Controller
         if ($product->has_approval_levels && (empty($product->approval_levels) || count($product->approval_levels) === 0)) {
             return back()->withErrors(['error' => 'Loan application must have levels of approval configured.'])->withInput();
         }
+
+        // Check direct loan threshold before product limits
+        $threshold = \App\Models\DirectLoanThreshold::forCompany()
+            ->where('loan_product_id', $validated['product_id'])
+            ->first();
+
+        if ($threshold && $validated['amount'] > $threshold->max_amount) {
+            $message = 'The requested amount exceeds the direct loan threshold limit. Amount should be applied and approved. ' . ($threshold->description ? 'Note: ' . $threshold->description : '');
+            return back()->withErrors(['amount' => $message])->withInput();
+        }
+
         $this->validateProductLimits($validated, $product);
 
         // 🔐 Check collateral OUTSIDE transaction

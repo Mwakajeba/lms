@@ -323,6 +323,26 @@
                             </div>
                             @endcan
 
+                            <!-- Direct Loans Threshold -->
+                            @can('manage direct loan threshold')
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <div class="mb-3">
+                                            <i class="bx bx-money fs-1 text-primary"></i>
+                                        </div>
+                                        <h5 class="card-title">Direct Loans Threshold</h5>
+                                        <p class="card-text">
+                                            Set maximum amounts for direct loans and associate with loan products.
+                                        </p>
+                                        <a href="{{ route('settings.direct-loans-threshold') }}" class="btn btn-primary">
+                                            <i class="bx bx-plus me-1"></i> Manage Thresholds
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            @endcan
+
                             @role('super-admin')
                             <div class="col-md-6 col-lg-4 mb-4">
                                 <div class="card border-purple">

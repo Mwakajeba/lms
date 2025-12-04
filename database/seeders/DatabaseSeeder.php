@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
       AccountClassSeeder::class,
       AccountGroupSeeder::class,
       ChartAccountSeeder::class,
+      BankSeeder::class,
       CashCollateralTypeSeeder::class,
       EquityCategorySeeder::class,
       RegionsTableSeeder::class,
