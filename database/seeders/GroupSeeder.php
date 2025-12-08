@@ -28,24 +28,46 @@ class GroupSeeder extends Seeder
             return;
         }
 
-        // Check if Individual group already exists
-        if (Group::where('name', 'Individual')->exists()) {
-            $this->command->info('Individual group already exists. Skipping...');
-            return;
+        // Define groups to create
+        $groups = [
+            [
+                'name' => 'Individual',
+                'minimum_members' => 1000000,
+                'maximum_members' => 1000000,
+                'meeting_day' => null,
+                'meeting_time' => null,
+                'description' => 'For individual loan customers'
+            ],
+            [
+                'name' => 'Group Loans',
+                'minimum_members' => 2,
+                'maximum_members' => 50,
+                'meeting_day' => 'Monday',
+                'meeting_time' => '10:00',
+                'description' => 'For group loan customers'
+            ]
+        ];
+
+        foreach ($groups as $groupData) {
+            // Check if group already exists
+            if (Group::where('name', $groupData['name'])->exists()) {
+                $this->command->info("{$groupData['name']} group already exists. Skipping...");
+                continue;
+            }
+
+            // Create group
+            Group::create([
+                'name' => $groupData['name'],
+                'loan_officer' => $adminUser->id,
+                'branch_id' => $branch->id,
+                'minimum_members' => $groupData['minimum_members'],
+                'maximum_members' => $groupData['maximum_members'],
+                'group_leader' => null,
+                'meeting_day' => $groupData['meeting_day'],
+                'meeting_time' => $groupData['meeting_time'],
+            ]);
+
+            $this->command->info("{$groupData['name']} group created successfully!");
         }
-
-        // Create Individual group
-        Group::create([
-            'name' => 'Individual',
-            'loan_officer' => $adminUser->id,
-            'branch_id' => $branch->id,
-            'minimum_members' => 1000000,
-            'maximum_members' => 1000000,
-            'group_leader' => null, // No specific leader for individual group
-            'meeting_day' => null, // No meetings for individual customers
-            'meeting_time' => null,
-        ]);
-
-        $this->command->info('Individual group created successfully!');
     }
 } 
