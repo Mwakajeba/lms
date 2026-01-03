@@ -8,6 +8,9 @@ use App\Models\Fee;
 use App\Models\Penalty;
 use App\Models\CashCollateralType;
 use App\Models\Role;
+use App\Models\Loan;
+use App\Models\LoanSchedule;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -265,13 +268,54 @@ class LoanProductController extends Controller
         $loanProduct->load([
             'principalReceivableAccount',
             'interestReceivableAccount',
-            'interestRevenueAccount',
-            'cashCollateralType'
-            // TODO: Add loan_product_id to loans table and uncomment this
-            // 'loans'
+            'interestRevenueAccount'
         ]);
 
-        return view('loan-products.show', compact('loanProduct'));
+        // Get all loans for this product
+        $loans = Loan::where('product_id', $loanProduct->id)
+            ->with(['customer', 'schedule.repayments'])
+            ->get();
+
+        // Calculate statistics
+        $activeLoans = $loans->where('status', 'active');
+        
+        $stats = [
+            'total_loans' => $activeLoans->count(),
+            'total_disbursed' => $activeLoans->sum('amount'),
+            'total_arrears' => 0,
+            'male_count' => 0,
+            'male_amount' => 0,
+            'female_count' => 0,
+            'female_amount' => 0,
+        ];
+
+        $today = Carbon::now();
+
+        // Calculate arrears and gender statistics for active loans only
+        foreach ($activeLoans as $loan) {
+            // Calculate arrears for this loan
+            if ($loan->schedule) {
+                foreach ($loan->schedule as $schedule) {
+                    $dueDate = Carbon::parse($schedule->due_date);
+                    if ($dueDate->lt($today) && $schedule->remaining_amount > 0) {
+                        $stats['total_arrears'] += $schedule->remaining_amount;
+                    }
+                }
+            }
+
+            // Gender statistics for disbursed loans only
+            if ($loan->customer) {
+                if ($loan->customer->sex === 'M') {
+                    $stats['male_count']++;
+                    $stats['male_amount'] += $loan->amount;
+                } elseif ($loan->customer->sex === 'F') {
+                    $stats['female_count']++;
+                    $stats['female_amount'] += $loan->amount;
+                }
+            }
+        }
+
+        return view('loan-products.show', compact('loanProduct', 'stats'));
     }
 
     /**
