@@ -792,6 +792,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('customers/bulk-upload', [CustomerController::class, 'bulkUpload'])->name('customers.bulk-upload');
     Route::post('customers/bulk-upload', [CustomerController::class, 'bulkUploadStore'])->name('customers.bulk-upload.store');
     Route::get('customers/download-sample', [CustomerController::class, 'downloadSample'])->name('customers.download-sample');
+    Route::get('customers/download-excel-template', [CustomerController::class, 'downloadExcelTemplate'])->name('customers.download-excel-template');
 
     // Documents upload/delete
     Route::post('customers/{encodedCustomerId}/documents', [CustomerController::class, 'uploadDocuments'])->name('customers.documents.upload');
