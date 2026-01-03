@@ -17,7 +17,8 @@
                 ]" />
                 <div>
                     <!-- @can('deactivate loan product') -->
-                    <button type="button" class="btn {{ $loanProduct->is_active ?? true ? 'btn-warning' : 'btn-success' }} toggle-status-btn"
+                    <button type="button" class="btn toggle-status-btn"
+                        style="background-color: {{ $loanProduct->is_active ?? true ? '#fcd105' : '#23A036' }}; color: {{ $loanProduct->is_active ?? true ? 'black' : 'white' }};"
                         title="{{ $loanProduct->is_active ?? true ? 'Deactivate' : 'Activate' }} Product"
                         data-product-id="{{ Hashids::encode($loanProduct->id) }}"
                         data-product-name="{{ $loanProduct->name }}"
@@ -28,13 +29,13 @@
                     <!-- @endcan -->
 
                     <!-- @can('edit loan product') -->
-                    <a href="{{ route('loan-products.edit', Hashids::encode($loanProduct->id)) }}" class="btn btn-primary">
+                    <a href="{{ route('loan-products.edit', Hashids::encode($loanProduct->id)) }}" class="btn" style="background-color: #fcd105; color: black;">
                         <i class="bx bx-edit"></i> Edit Product
                     </a>
                     <!-- @endcan -->
 
                     <!-- @can('view loan product') -->
-                    <a href="{{ route('loan-products.index') }}" class="btn btn-secondary">
+                    <a href="{{ route('loan-products.index') }}" class="btn" style="background-color: black; color: white;">
                         <i class="bx bx-arrow-back"></i> Back to List
                     </a>
                     <!-- @endcan -->
@@ -100,11 +101,128 @@
                             <h5 class="card-title text-muted mb-1">Status</h5>
                             <h4 class="mb-0">
                                 @if($loanProduct->is_active ?? true)
-                                    <span class="badge bg-success fs-6">Active</span>
+                                    <span class="badge" style="background-color: #23A036; color: white;">Active</span>
                                 @else
-                                    <span class="badge bg-danger fs-6">Inactive</span>
+                                    <span class="badge" style="background-color: black; color: white;">Inactive</span>
                                 @endif
                             </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loan Statistics Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h5 class="mb-3"><i class="bx bx-bar-chart-alt-2 me-2"></i>Loan Statistics</h5>
+                </div>
+            </div>
+
+            <!-- Stats Cards Row -->
+            <div class="row row-cols-1 row-cols-lg-4 mb-4">
+                <div class="col">
+                    <div class="card radius-10 bg-primary bg-gradient">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <p class="mb-0 text-white">Total Loans Disbursed</p>
+                                    <h4 class="my-1 text-white">{{ number_format($stats['total_loans']) }}</h4>
+                                </div>
+                                <div class="text-white ms-auto font-35"><i class='bx bx-briefcase'></i></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card radius-10 bg-success bg-gradient">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <p class="mb-0 text-white">Total Amount Disbursed</p>
+                                    <h4 class="my-1 text-white">TZS {{ number_format($stats['total_disbursed'], 2) }}</h4>
+                                </div>
+                                <div class="text-white ms-auto font-35"><i class='bx bx-money'></i></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card radius-10 bg-danger bg-gradient">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <p class="mb-0 text-white">Total Arrears</p>
+                                    <h4 class="my-1 text-white">TZS {{ number_format($stats['total_arrears'], 2) }}</h4>
+                                </div>
+                                <div class="text-white ms-auto font-35"><i class='bx bx-error-circle'></i></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card radius-10 bg-warning bg-gradient">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <p class="mb-0 text-white">Arrears %</p>
+                                    <h4 class="my-1 text-white">{{ $stats['total_disbursed'] > 0 ? number_format(($stats['total_arrears'] / $stats['total_disbursed']) * 100, 2) : 0 }}%</h4>
+                                </div>
+                                <div class="text-white ms-auto font-35"><i class='bx bx-line-chart'></i></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gender Statistics -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card radius-10">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0"><i class='bx bx-male'></i> Male Customers</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Number of Loans</p>
+                                    <h4>{{ number_format($stats['male_count']) }}</h4>
+                                </div>
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Total Amount</p>
+                                    <h4 class="text-success">TZS {{ number_format($stats['male_amount'], 2) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress mt-3" style="height: 20px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: {{ $stats['total_disbursed'] > 0 ? ($stats['male_amount'] / $stats['total_disbursed']) * 100 : 0 }}%">
+                                    {{ $stats['total_disbursed'] > 0 ? number_format(($stats['male_amount'] / $stats['total_disbursed']) * 100, 1) : 0 }}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card radius-10">
+                        <div class="card-header bg-danger text-white">
+                            <h6 class="mb-0"><i class='bx bx-female'></i> Female Customers</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Number of Loans</p>
+                                    <h4>{{ number_format($stats['female_count']) }}</h4>
+                                </div>
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Total Amount</p>
+                                    <h4 class="text-success">TZS {{ number_format($stats['female_amount'], 2) }}</h4>
+                                </div>
+                            </div>
+                            <div class="progress mt-3" style="height: 20px;">
+                                <div class="progress-bar bg-danger" role="progressbar" 
+                                     style="width: {{ $stats['total_disbursed'] > 0 ? ($stats['female_amount'] / $stats['total_disbursed']) * 100 : 0 }}%">
+                                    {{ $stats['total_disbursed'] > 0 ? number_format(($stats['female_amount'] / $stats['total_disbursed']) * 100, 1) : 0 }}%
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -115,7 +233,7 @@
                 <!-- Basic Information Card -->
                 <div class="col-lg-6 mb-4">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-primary text-white">
+                        <div class="card-header" style="background-color: #006400; color: white;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-info-circle me-2"></i>Basic Information
                             </h5>
@@ -156,7 +274,7 @@
                 <!-- Financial Information Card -->
                 <div class="col-lg-6 mb-4">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-success text-white">
+                        <div class="card-header" style="background-color: #23A036; color: white;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-dollar-circle me-2"></i>Financial Information
                             </h5>
@@ -198,7 +316,7 @@
                 <!-- Top Up Configuration Card -->
                 <div class="col-lg-6 mb-4">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-warning text-dark">
+                        <div class="card-header" style="background-color: #fcd105; color: black;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-up-arrow-circle me-2"></i>Top Up Configuration
                             </h5>
@@ -223,7 +341,7 @@
                 <!-- Cash Collateral Configuration Card -->
                 <div class="col-lg-6 mb-4">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-info text-white">
+                        <div class="card-header" style="background-color: #23A036; color: white;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-shield-check me-2"></i>Cash Collateral Configuration
                             </h5>
@@ -234,19 +352,16 @@
                                     <label class="form-label text-muted small">Has Cash Collateral</label>
                                     <p class="mb-0">
                                         @if($loanProduct->has_cash_collateral)
-                                            <span class="badge bg-success">Yes</span>
+                                            <span class="badge" style="background-color: #23A036; color: white;">Yes</span>
                                         @else
-                                            <span class="badge bg-light text-dark">No</span>
+                                            <span class="badge" style="background-color: black; color: white;">No</span>
                                         @endif
                                     </p>
                                 </div>
                                 @if($loanProduct->has_cash_collateral)
                                     <div class="col-sm-6 mb-3">
                                         <label class="form-label text-muted small">Collateral Type</label>
-                                        <p class="mb-0 fw-bold">{{ $loanProduct->cash_collateral_type }}</p>
-                                        @if($loanProduct->cashCollateralType)
-                                            <small class="text-muted">{{ $loanProduct->cashCollateralType->description ?? '' }}</small>
-                                        @endif
+                                        <p class="mb-0 fw-bold">{{ $loanProduct->cash_collateral_type ?? 'N/A' }}</p>
                                     </div>
                                     <div class="col-sm-6 mb-3">
                                         <label class="form-label text-muted small">Value Type</label>
@@ -268,7 +383,7 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="card border-0 shadow-sm">
-                            <div class="card-header bg-secondary text-white">
+                            <div class="card-header" style="background-color: #006400; color: white;">
                                 <h5 class="card-title mb-0">
                                     <i class="bx bx-user-check me-2"></i>Approval Configuration
                                 </h5>
@@ -279,7 +394,9 @@
                                         <label class="form-label text-muted small">Approval Hierarchy</label>
                                         <div class="mb-2">
                                             @php
-                                                $approvalRoles = explode(',', $loanProduct->approval_levels);
+                                                $approvalRoles = is_array($loanProduct->approval_levels) 
+                                                    ? $loanProduct->approval_levels 
+                                                    : explode(',', $loanProduct->approval_levels);
                                                 foreach ($approvalRoles as $index => $roleIdentifier) {
                                                     $roleIdentifier = trim($roleIdentifier);
                                                     if (is_numeric($roleIdentifier)) {
@@ -309,7 +426,7 @@
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-dark text-white">
+                        <div class="card-header" style="background-color: darkgreen; color: white;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-book-open me-2"></i>Chart Accounts Configuration
                             </h5>
@@ -357,7 +474,7 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="card border-0 shadow-sm">
-                            <div class="card-header bg-purple text-white">
+                            <div class="card-header" style="background-color: #006400; color: white;">
                                 <h5 class="card-title mb-0">
                                     <i class="bx bx-sort-alt-2 me-2"></i>Repayment Configuration
                                 </h5>
@@ -368,7 +485,9 @@
                                         <label class="form-label text-muted small">Repayment Order</label>
                                         <div class="mb-2">
                                             @php
-                                                $orderArray = explode(',', $loanProduct->repayment_order);
+                                                $orderArray = is_array($loanProduct->repayment_order) 
+                                                    ? $loanProduct->repayment_order 
+                                                    : explode(',', $loanProduct->repayment_order);
                                                 $componentLabels = [
                                                     'principal' => 'Principal',
                                                     'interest' => 'Interest',
@@ -407,7 +526,7 @@
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-danger text-white">
+                        <div class="card-header" style="background-color: #fcd105; color: black;">
                             <h5 class="card-title mb-0">
                                 <i class="bx bx-money me-2"></i>Fees and Penalties Configuration
                             </h5>
@@ -432,7 +551,7 @@
                                                             <br>
                                                             <small class="text-muted">{{ $fee->fee_type }}</small>
                                                         </div>
-                                                        <span class="badge bg-success">{{ $fee->status }}</span>
+                                                        <span class="badge" style="background-color: #23A036; color: white;">{{ $fee->status }}</span>
                                                     </div>
                                                 @endif
                                             @endforeach
@@ -460,7 +579,7 @@
                                                             <br>
                                                             <small class="text-muted">{{ $penalty->penalty_type }}</small>
                                                         </div>
-                                                        <span class="badge bg-warning">{{ $penalty->status }}</span>
+                                                        <span class="badge" style="background-color: #fcd105; color: black;">{{ $penalty->status }}</span>
                                                     </div>
                                                 @endif
                                             @endforeach

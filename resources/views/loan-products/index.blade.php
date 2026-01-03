@@ -110,17 +110,15 @@ use Vinkla\Hashids\Facades\Hashids;
                                         </td>
                                         <td class="text-center text-nowrap">
                                             <div class="btn-group" role="group">
-                                                @canany(['view product details', 'admin'])
                                                 <a href="{{ route('loan-products.show', Hashids::encode($product->id)) }}"
                                                     class="btn btn-sm btn-outline-info" title="View Details">
-                                                    view
+                                                    <i class="bx bx-show"></i> View
                                                 </a>
-                                                @endcanany
 
                                                 @can('edit loan product')
                                                 <a href="{{ route('loan-products.edit', Hashids::encode($product->id)) }}"
                                                     class="btn btn-sm btn-outline-primary" title="Edit Product">
-                                                    edit
+                                                    <i class="bx bx-edit"></i> Edit
                                                 </a>
                                                 @endcan
 
@@ -131,7 +129,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     data-product-id="{{ Hashids::encode($product->id) }}"
                                                     data-product-name="{{ $product->name }}"
                                                     data-current-status="{{ $product->is_active ?? true ? 'active' : 'inactive' }}">
-                                                    {{ $product->is_active ?? true ? 'deactivate' : 'activate' }}
+                                                    <i class="bx {{ $product->is_active ?? true ? 'bx-pause-circle' : 'bx-play-circle' }}"></i> {{ $product->is_active ?? true ? 'Deactivate' : 'Activate' }}
                                                 </button>
                                                 @endcan
 
@@ -140,7 +138,7 @@ use Vinkla\Hashids\Facades\Hashids;
                                                     title="Delete Product"
                                                     data-product-id="{{ Hashids::encode($product->id) }}"
                                                     data-product-name="{{ $product->name }}">
-                                                    delete
+                                                    <i class="bx bx-trash"></i> Delete
                                                 </button>
                                                 @endcan
                                             </div>
