@@ -174,7 +174,17 @@
                                         alt="{{ $customer->name }}" class="rounded-circle p-1 bg-primary" width="110" />
                                 </div>
                                 <h5 class="font-size-16 mb-1 text-truncate">{{ $customer->name }}</h5>
-                                <p class="text-muted text-truncate mb-3">{{ $customer->phone1 ?? 'No phone' }}</p>
+                                <p class="text-muted text-truncate mb-3">
+                                    @if($customer->phone1)
+                                        @if(str_starts_with($customer->phone1, '255'))
+                                            <span class="badge bg-primary">255</span> {{ substr($customer->phone1, 3) }}
+                                        @else
+                                            {{ $customer->phone1 }}
+                                        @endif
+                                    @else
+                                        No phone
+                                    @endif
+                                </p>
                             </div>
 
                             <hr class="my-4">
@@ -193,15 +203,49 @@
                                             </tr>
                                             <tr>
                                                 <th scope="row">Phone :</th>
-                                                <td>{{ $customer->phone1 }}</td>
+                                                <td>
+                                                    @if($customer->phone1)
+                                                        @if(str_starts_with($customer->phone1, '255'))
+                                                            <span class="badge bg-primary">255</span> {{ substr($customer->phone1, 3) }}
+                                                        @else
+                                                            {{ $customer->phone1 }}
+                                                        @endif
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <th scope="row">Gender :</th>
                                                 <td>{{ $customer->sex }}</td>
                                             </tr>
                                             <tr>
+                                                <th scope="row">Date of Birth :</th>
+                                                <td>
+                                                    @if($customer->dob)
+                                                        {{ \Carbon\Carbon::parse($customer->dob)->format('F d, Y') }}
+                                                        <span class="badge bg-info ms-2">Age: {{ \Carbon\Carbon::parse($customer->dob)->age }} years</span>
+                                                        @if(\Carbon\Carbon::parse($customer->dob)->age < 18)
+                                                            <span class="badge bg-warning ms-1">Under 18</span>
+                                                        @endif
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                            <tr>
                                                 <th scope="row">Alt Phone :</th>
-                                                <td>{{ $customer->phone2 ?? 'N/A'}}</td>
+                                                <td>
+                                                    @if($customer->phone2)
+                                                        @if(str_starts_with($customer->phone2, '255'))
+                                                            <span class="badge bg-primary">255</span> {{ substr($customer->phone2, 3) }}
+                                                        @else
+                                                            {{ $customer->phone2 }}
+                                                        @endif
+                                                    @else
+                                                        N/A
+                                                    @endif
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <th scope="row">Work :</th>

@@ -164,9 +164,31 @@ class CustomerController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
-            'phone1' => 'required|string|max:20',
+            'phone1' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:customers,phone1',
+                function ($attribute, $value, $fail) {
+                    // Format phone number first to check the prefix
+                    $formatted = $this->formatPhoneNumber($value);
+                    if (!str_starts_with($formatted, '255')) {
+                        $fail('The phone number must start with prefix 255.');
+                    }
+                },
+            ],
             'phone2' => 'nullable|string|max:20',
-            'dob' => 'required|date',
+            'dob' => [
+                'required',
+                'date',
+                function ($attribute, $value, $fail) {
+                    $dob = \Carbon\Carbon::parse($value);
+                    $age = $dob->age;
+                    if ($age < 18) {
+                        $fail('The customer must be at least 18 years old.');
+                    }
+                },
+            ],
             'sex' => 'required|in:M,F',
             'region_id' => 'required|exists:regions,id',
             'district_id' => 'required|exists:districts,id',
@@ -344,9 +366,31 @@ class CustomerController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000', // Added description validation
-            'phone1' => 'required|string|max:20',
+            'phone1' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:customers,phone1,' . $customer->id,
+                function ($attribute, $value, $fail) {
+                    // Format phone number first to check the prefix
+                    $formatted = $this->formatPhoneNumber($value);
+                    if (!str_starts_with($formatted, '255')) {
+                        $fail('The phone number must start with prefix 255.');
+                    }
+                },
+            ],
             'phone2' => 'nullable|string|max:20',
-            'dob' => 'required|date',
+            'dob' => [
+                'required',
+                'date',
+                function ($attribute, $value, $fail) {
+                    $dob = \Carbon\Carbon::parse($value);
+                    $age = $dob->age;
+                    if ($age < 18) {
+                        $fail('The customer must be at least 18 years old.');
+                    }
+                },
+            ],
             'sex' => 'required|in:M,F',
             'region_id' => 'required|exists:regions,id',
             'district_id' => 'required|exists:districts,id',
@@ -605,14 +649,45 @@ class CustomerController extends Controller
                         continue;
                     }
 
+                    // Format phone number for validation
+                    $formattedPhone1 = $this->formatPhoneNumber(trim($rowData["phone1"]));
+                    
+                    // Validate phone number prefix
+                    if (!str_starts_with($formattedPhone1, '255')) {
+                        $errors[] = "Row " . ($rowIndex + 2) . ": Phone number must start with prefix 255";
+                        $errorCount++;
+                        continue;
+                    }
+
+                    // Validate phone number uniqueness
+                    $existingCustomer = Customer::where('phone1', $formattedPhone1)->first();
+                    if ($existingCustomer) {
+                        $errors[] = "Row " . ($rowIndex + 2) . ": Phone number already exists";
+                        $errorCount++;
+                        continue;
+                    }
+
+                    // Validate age (must be at least 18 years old)
+                    try {
+                        $dob = \Carbon\Carbon::parse($rowData['dob']);
+                        $age = $dob->age;
+                        if ($age < 18) {
+                            $errors[] = "Row " . ($rowIndex + 2) . ": Customer must be at least 18 years old (DOB: " . $rowData['dob'] . ")";
+                            $errorCount++;
+                            continue;
+                        }
+                    } catch (\Exception $e) {
+                        $errors[] = "Row " . ($rowIndex + 2) . ": Invalid date of birth format";
+                        $errorCount++;
+                        continue;
+                    }
+
                     // Create customer data
                     $customerData = [
                         // Format phone numbers
-                        "phone1" => $this->formatPhoneNumber(trim($rowData["phone1"])),
+                        "phone1" => $formattedPhone1,
                         "phone2" => !empty($rowData["phone2"]) ? $this->formatPhoneNumber(trim($rowData["phone2"])) : "",
                         'name' => trim($rowData['name']),
-                        'phone1' => trim($rowData['phone1']),
-                        'phone2' => trim($rowData['phone2'] ?? ''),
                         'dob' => $rowData['dob'],
                         'sex' => strtoupper($rowData['sex']),
                         'region_id' => $rowData['region_id'] ?? null,
