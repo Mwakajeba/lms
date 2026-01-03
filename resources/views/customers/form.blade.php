@@ -54,7 +54,10 @@ $isEdit = isset($customer);
         <div class="col-md-6 mb-3">
             <label class="form-label">Phone Number <span class="text-danger">*</span></label>
             <input type="text" name="phone1" class="form-control @error('phone1') is-invalid @enderror"
-                value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="Enter phone number">
+                value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="e.g. 255712345678 or 0712345678">
+            <div class="form-text">
+                <i class="bx bx-info-circle"></i> Phone number must start with prefix <strong>255</strong> (e.g., 255712345678). If you enter a number starting with 0, it will be automatically formatted.
+            </div>
             @error('phone1') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
@@ -140,8 +143,15 @@ $isEdit = isset($customer);
         <!-- DOB -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
-            <input type="date" name="dob" class="form-control @error('dob') is-invalid @enderror"
-                value="{{ old('dob', isset($customer) && $customer->dob ? \Carbon\Carbon::parse($customer->dob)->format('Y-m-d') : '') }}">
+            <input type="date" name="dob" id="dob" class="form-control @error('dob') is-invalid @enderror"
+                value="{{ old('dob', isset($customer) && $customer->dob ? \Carbon\Carbon::parse($customer->dob)->format('Y-m-d') : '') }}"
+                max="{{ \Carbon\Carbon::now()->subYears(18)->format('Y-m-d') }}">
+            <div class="form-text">
+                <i class="bx bx-info-circle"></i> Customer must be <strong>at least 18 years old</strong> (Date of birth must be on or before {{ \Carbon\Carbon::now()->subYears(18)->format('F d, Y') }}).
+            </div>
+            <div id="age-display" class="text-muted mt-1" style="display: none;">
+                <small>Age: <span id="calculated-age"></span> years</small>
+            </div>
             @error('dob') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
@@ -388,6 +398,51 @@ $isEdit = isset($customer);
             reader.readAsDataURL(file);
         }
     }
+
+    // Calculate and display age from date of birth
+    document.addEventListener('DOMContentLoaded', function() {
+        const dobInput = document.getElementById('dob');
+        const ageDisplay = document.getElementById('age-display');
+        const calculatedAgeSpan = document.getElementById('calculated-age');
+
+        if (dobInput && ageDisplay && calculatedAgeSpan) {
+            function calculateAge() {
+                const dobValue = dobInput.value;
+                if (dobValue) {
+                    const dob = new Date(dobValue);
+                    const today = new Date();
+                    let age = today.getFullYear() - dob.getFullYear();
+                    const monthDiff = today.getMonth() - dob.getMonth();
+                    
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                        age--;
+                    }
+                    
+                    calculatedAgeSpan.textContent = age;
+                    ageDisplay.style.display = 'block';
+                    
+                    // Add warning if age is less than 18
+                    if (age < 18) {
+                        ageDisplay.className = 'text-danger mt-1';
+                        calculatedAgeSpan.textContent = age + ' (Must be at least 18)';
+                    } else {
+                        ageDisplay.className = 'text-success mt-1';
+                    }
+                } else {
+                    ageDisplay.style.display = 'none';
+                }
+            }
+
+            // Calculate age on page load if date is already set
+            if (dobInput.value) {
+                calculateAge();
+            }
+
+            // Calculate age when date changes
+            dobInput.addEventListener('change', calculateAge);
+            dobInput.addEventListener('input', calculateAge);
+        }
+    });
 
 
     // Add/remove filetype-document upload rows
