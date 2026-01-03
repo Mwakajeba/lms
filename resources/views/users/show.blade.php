@@ -55,9 +55,19 @@
                                                 <td>{{ $user->phone }}</td>
                                             </tr>
                                             <tr>
-                                                <th scope="row">Branch :</th>
+                                                <th scope="row">Primary Branch :</th>
                                                 <td>{{ $user->branch->name ?? 'N/A' }}</td>
                                             </tr>
+                                            @if($user->branches && $user->branches->count() > 0)
+                                            <tr>
+                                                <th scope="row">All Branches :</th>
+                                                <td>
+                                                    @foreach($user->branches as $branch)
+                                                        <span class="badge bg-info me-1">{{ $branch->name }}</span>
+                                                    @endforeach
+                                                </td>
+                                            </tr>
+                                            @endif
                                             <tr>
                                                 <th scope="row">Company :</th>
                                                 <td>{{ $user->company->name ?? 'N/A' }}</td>
@@ -194,8 +204,16 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label class="form-label fw-bold">Branch</label>
+                                        <label class="form-label fw-bold">Primary Branch</label>
                                         <p class="text-muted mb-0">{{ $user->branch->name ?? 'Not assigned' }}</p>
+                                        @if($user->branches && $user->branches->count() > 0)
+                                            <div class="mt-2">
+                                                <small class="text-muted d-block mb-1">All Assigned Branches:</small>
+                                                @foreach($user->branches as $branch)
+                                                    <span class="badge bg-info me-1 mb-1">{{ $branch->name }}</span>
+                                                @endforeach
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>
@@ -224,6 +242,105 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Loan Statistics -->
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title mb-4"><i class="bx bx-bar-chart-alt-2 me-2"></i>Loan Statistics</h4>
+                            
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <div class="card border-primary">
+                                        <div class="card-body text-center">
+                                            <div class="mb-2">
+                                                <i class="bx bx-briefcase text-primary" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <h6 class="text-muted mb-1">Total Loans</h6>
+                                            <h4 class="text-primary mb-0">{{ number_format($stats['total_loans'] ?? 0) }}</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-3 mb-3">
+                                    <div class="card border-success">
+                                        <div class="card-body text-center">
+                                            <div class="mb-2">
+                                                <i class="bx bx-money text-success" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <h6 class="text-muted mb-1">Total Amount</h6>
+                                            <h4 class="text-success mb-0">TZS {{ number_format($stats['total_amount'] ?? 0, 2) }}</h4>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-3 mb-3">
+                                    <div class="card border-warning">
+                                        <div class="card-body text-center">
+                                            <div class="mb-2">
+                                                <i class="bx bx-error-circle text-warning" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <h6 class="text-muted mb-1">Total Arrears</h6>
+                                            <h4 class="text-warning mb-0">TZS {{ number_format($stats['total_arrears'] ?? 0, 2) }}</h4>
+                                            @if(($stats['total_amount'] ?? 0) > 0)
+                                                <small class="text-muted">
+                                                    {{ number_format((($stats['total_arrears'] ?? 0) / $stats['total_amount']) * 100, 2) }}% of Total
+                                                </small>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-3 mb-3">
+                                    <div class="card border-danger">
+                                        <div class="card-body text-center">
+                                            <div class="mb-2">
+                                                <i class="bx bx-error text-danger" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <h6 class="text-muted mb-1">NPL (Non-Performing)</h6>
+                                            <h4 class="text-danger mb-0">TZS {{ number_format($stats['total_npl'] ?? 0, 2) }}</h4>
+                                            <small class="text-muted">
+                                                {{ number_format($stats['npl_count'] ?? 0) }} loans (DPD > 90 days)
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assigned Branches -->
+                    @if($user->branches && $user->branches->count() > 0)
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title mb-4"><i class="bx bx-git-branch me-2"></i>Assigned Branches</h4>
+                            
+                            <div class="row">
+                                @foreach($user->branches as $branch)
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border">
+                                        <div class="card-body">
+                                            <h6 class="mb-2">
+                                                <i class="bx bx-building-house me-2 text-primary"></i>
+                                                {{ $branch->name }}
+                                            </h6>
+                                            @if($branch->email)
+                                                <p class="text-muted mb-1 small">
+                                                    <i class="bx bx-envelope me-1"></i> {{ $branch->email }}
+                                                </p>
+                                            @endif
+                                            @if($branch->phone)
+                                                <p class="text-muted mb-0 small">
+                                                    <i class="bx bx-phone me-1"></i> {{ $branch->phone }}
+                                                </p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                    @endif
 
                     <!-- Roles & Permissions -->
                     <div class="card">

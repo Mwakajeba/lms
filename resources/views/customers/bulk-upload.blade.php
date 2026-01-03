@@ -18,15 +18,36 @@
                     <div class="card radius-10">
                         <div class="card-body">
                             <div class="row">
-                                <!-- Sample Download Section -->
+                                <!-- Excel Template Download Section -->
+                                <div class="col-md-6 mb-4">
+                                    <div class="card border-success">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0"><i class="bx bx-download me-2"></i>Download Excel Template (Recommended)</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="text-muted mb-3">Download the Excel template with dependent dropdowns (Region → District) and data validation.</p>
+                                            <ul class="text-muted small mb-3">
+                                                <li>✅ Dependent dropdowns: Region → District</li>
+                                                <li>✅ Sex validation: M or F only</li>
+                                                <li>✅ Easy data entry</li>
+                                                <li>✅ Auto-formats phone numbers</li>
+                                            </ul>
+                                            <a href="{{ route('customers.download-excel-template') }}"
+                                                class="btn btn-success">
+                                                <i class="bx bx-download me-2"></i>Download Excel Template (.xlsx)
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CSV Sample Download Section -->
                                 <div class="col-md-6 mb-4">
                                     <div class="card border-primary">
                                         <div class="card-header bg-primary text-white">
                                             <h6 class="mb-0"><i class="bx bx-download me-2"></i>Download Sample CSV</h6>
                                         </div>
                                         <div class="card-body">
-                                            <p class="text-muted mb-3">Download the sample CSV file to understand the
-                                                required format for bulk upload.</p>
+                                            <p class="text-muted mb-3">Download the sample CSV file for basic bulk upload (without dropdowns).</p>
                                             <a href="{{ route('customers.download-sample') }}"
                                                 class="btn btn-outline-primary">
                                                 <i class="bx bx-download me-2"></i>Download Sample CSV
@@ -102,12 +123,12 @@
                                             </div>
                                             <div class="card-body">
                                                 <div class="mb-3">
-                                                    <label for="csv_file" class="form-label">Select CSV File <span
+                                                    <label for="csv_file" class="form-label">Select File (CSV or Excel) <span
                                                             class="text-danger">*</span></label>
                                                     <input type="file" name="csv_file" id="csv_file"
                                                         class="form-control @error('csv_file') is-invalid @enderror"
-                                                        accept=".csv" required>
-                                                    <div class="form-text">Only CSV files are allowed. Maximum size: 5MB
+                                                        accept=".csv,.xlsx,.xls" required>
+                                                    <div class="form-text">CSV or Excel files (.csv, .xlsx, .xls) are allowed. Maximum size: 10MB. For files with more than 100 rows, processing will be queued automatically.
                                                     </div>
                                                     @error('csv_file')
                                                         <div class="invalid-feedback">{{ $message }}</div>

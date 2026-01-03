@@ -196,9 +196,64 @@ class UserController extends Controller
         }
 
         // Load user relationships
-        $user->load(['branch', 'company', 'roles', 'permissions']);
+        $user->load(['branch', 'company', 'roles', 'permissions', 'branches']);
 
-        return view('users.show', compact('user'));
+        // Calculate loan statistics for this user
+        $activeLoans = $user->loans()->where('status', 'active')
+            ->with(['schedule.repayments'])
+            ->get();
+        
+        // Load branches if not already loaded
+        if (!$user->relationLoaded('branches')) {
+            $user->load('branches');
+        }
+
+        $stats = [
+            'total_loans' => $activeLoans->count(),
+            'total_amount' => $activeLoans->sum('amount'),
+            'total_arrears' => 0,
+            'total_npl' => 0,
+            'npl_count' => 0,
+        ];
+
+        $today = \Carbon\Carbon::now();
+
+        foreach ($activeLoans as $loan) {
+            $loanArrears = 0;
+            $maxDpd = 0;
+            $hasNplSchedule = false;
+            $nplOutstanding = 0;
+
+            foreach ($loan->schedule as $schedule) {
+                $dueDate = \Carbon\Carbon::parse($schedule->due_date);
+                $remainingAmount = $schedule->remaining_amount ?? 0;
+
+                if ($dueDate->lt($today) && $remainingAmount > 0) {
+                    $loanArrears += $remainingAmount;
+                    
+                    // Calculate Days Past Due (DPD)
+                    $dpd = $today->diffInDays($dueDate);
+                    if ($dpd > $maxDpd) {
+                        $maxDpd = $dpd;
+                    }
+
+                    // NPL: Loans with DPD > 90 days
+                    if ($dpd > 90) {
+                        $hasNplSchedule = true;
+                        $nplOutstanding += $remainingAmount;
+                    }
+                }
+            }
+
+            $stats['total_arrears'] += $loanArrears;
+
+            if ($hasNplSchedule && $nplOutstanding > 0) {
+                $stats['total_npl'] += $nplOutstanding;
+                $stats['npl_count']++;
+            }
+        }
+
+        return view('users.show', compact('user', 'stats'));
     }
 
     public function edit(User $user)

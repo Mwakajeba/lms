@@ -15,6 +15,8 @@ use App\Models\User;
 use App\Models\CashCollateralType;
 use App\Models\Filetype;
 use App\Services\LoanPenaltyService;
+use App\Exports\CustomerImportTemplateExport;
+use App\Jobs\BulkCustomerImportJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +24,8 @@ use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\DB;
 use Vinkla\Hashids\Facades\Hashids;
 use Yajra\DataTables\Facades\DataTables;
+use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 set_time_limit(0);              // no limit for this request
 ini_set('max_execution_time', 0);
@@ -594,11 +598,17 @@ class CustomerController extends Controller
         return view('customers.bulk-upload', compact('collateralTypes'));
     }
 
+    // Download Excel template
+    public function downloadExcelTemplate()
+    {
+        return Excel::download(new CustomerImportTemplateExport(), 'customer_import_template.xlsx');
+    }
+
     // Process bulk upload
     public function bulkUploadStore(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:5120', // 5MB max
+            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:10240', // 10MB max, support Excel
             'has_cash_collateral' => 'nullable|boolean',
             'collateral_type_id' => 'nullable|exists:cash_collateral_types,id',
         ]);
@@ -610,51 +620,285 @@ class CustomerController extends Controller
         try {
             $file = $request->file('csv_file');
             $path = $file->getRealPath();
+            $extension = strtolower($file->getClientOriginalExtension());
 
-            $data = array_map('str_getcsv', file($path));
+            // Read file based on extension
+            if (in_array($extension, ['xlsx', 'xls'])) {
+                $spreadsheet = IOFactory::load($path);
+                $sheet = $spreadsheet->getActiveSheet();
+                $rows = $sheet->toArray(null, true, true, false);
+                
+                // Filter out completely empty rows
+                $data = array_filter($rows, function($row) {
+                    return !empty(array_filter($row, function($cell) {
+                        return trim((string)$cell) !== '';
+                    }));
+                });
+                $data = array_values($data); // Re-index array
+            } else {
+                $data = array_map('str_getcsv', file($path));
+                // Filter out empty rows
+                $data = array_filter($data, function($row) {
+                    return !empty(array_filter($row, function($cell) {
+                        return trim((string)$cell) !== '';
+                    }));
+                });
+                $data = array_values($data); // Re-index array
+            }
+
+            if (empty($data)) {
+                return back()->withErrors(['csv_file' => 'The file is empty or contains no valid data.']);
+            }
+
             $header = array_shift($data); // Remove header row
+            
+            // Clean header - remove null values and trim
+            $header = array_map(function($h) {
+                return trim((string)($h ?? ''));
+            }, $header);
+            
+            // Log original headers for debugging
+            Log::info('Original headers from file', ['headers' => $header]);
+            
+            // Normalize headers - map Excel descriptive headers to simple names
+            $normalizedHeader = [];
+            foreach ($header as $index => $h) {
+                if (empty($h)) {
+                    $normalizedHeader[] = 'column_' . ($index + 1);
+                    continue;
+                }
+                
+                $hLower = strtolower(trim((string)$h));
+                
+                // Remove parentheses and extra text, then map
+                $hClean = preg_replace('/\(.*?\)/', '', $hLower); // Remove content in parentheses
+                $hClean = trim($hClean);
+                
+                // Map headers intelligently (check most specific/matching patterns first)
+                // Check for Date of Birth / DOB
+                if (stripos($hLower, 'date of birth') !== false || stripos($hLower, 'dob') !== false || stripos($hClean, 'date of birth') !== false) {
+                    $normalizedHeader[] = 'dob';
+                } 
+                // Check for Sex / Gender
+                elseif (stripos($hLower, 'sex') !== false || stripos($hLower, 'gender') !== false || stripos($hClean, 'sex') !== false) {
+                    $normalizedHeader[] = 'sex';
+                } 
+                // Check for Phone2
+                elseif (stripos($hLower, 'phone2') !== false || (stripos($hLower, 'phone') !== false && (stripos($hLower, 'alternative') !== false || stripos($hLower, '2') !== false || stripos($hLower, 'phone2') !== false))) {
+                    $normalizedHeader[] = 'phone2';
+                } 
+                // Check for Phone1 or just Phone
+                elseif (stripos($hLower, 'phone1') !== false || (stripos($hLower, 'phone') !== false && stripos($hLower, 'phone2') === false)) {
+                    $normalizedHeader[] = 'phone1';
+                } 
+                // Check for Name
+                elseif (stripos($hLower, 'name') !== false && stripos($hLower, 'customer') === false) {
+                    $normalizedHeader[] = 'name';
+                } 
+                // Check for Region (not region_id)
+                elseif ((stripos($hLower, 'region') !== false || stripos($hClean, 'region') !== false) && stripos($hLower, 'region_id') === false && stripos($hLower, 'region id') === false) {
+                    $normalizedHeader[] = 'region';
+                } 
+                // Check for District (not district_id)
+                elseif ((stripos($hLower, 'district') !== false || stripos($hClean, 'district') !== false) && stripos($hLower, 'district_id') === false && stripos($hLower, 'district id') === false) {
+                    $normalizedHeader[] = 'district';
+                } 
+                // Check for region_id
+                elseif (stripos($hLower, 'region_id') !== false || stripos($hLower, 'region id') !== false) {
+                    $normalizedHeader[] = 'region_id';
+                } 
+                // Check for district_id
+                elseif (stripos($hLower, 'district_id') !== false || stripos($hLower, 'district id') !== false) {
+                    $normalizedHeader[] = 'district_id';
+                } 
+                // Check for Work Address
+                elseif (stripos($hLower, 'work address') !== false || stripos($hLower, 'workaddress') !== false) {
+                    $normalizedHeader[] = 'workaddress';
+                } 
+                // Check for Work
+                elseif (stripos($hLower, 'work') !== false && stripos($hLower, 'address') === false) {
+                    $normalizedHeader[] = 'work';
+                } 
+                // Check for ID Type
+                elseif (stripos($hLower, 'id type') !== false || stripos($hLower, 'idtype') !== false) {
+                    $normalizedHeader[] = 'idtype';
+                } 
+                // Check for ID Number
+                elseif (stripos($hLower, 'id number') !== false || stripos($hLower, 'idnumber') !== false) {
+                    $normalizedHeader[] = 'idnumber';
+                } 
+                // Check for Relation
+                elseif (stripos($hLower, 'relation') !== false) {
+                    $normalizedHeader[] = 'relation';
+                } 
+                // Check for Description
+                elseif (stripos($hLower, 'description') !== false) {
+                    $normalizedHeader[] = 'description';
+                } 
+                else {
+                    // Fallback: use cleaned version
+                    $cleaned = preg_replace('/[^a-z0-9_]/', '', $hLower);
+                    $normalizedHeader[] = !empty($cleaned) ? $cleaned : 'column_' . ($index + 1);
+                }
+            }
+            
+            // Log normalized headers for debugging
+            Log::info('Normalized headers', ['headers' => $normalizedHeader]);
+            
+            $header = $normalizedHeader;
 
             // Validate CSV structure
             $requiredColumns = ['name', 'phone1', 'dob', 'sex'];
-            $missingColumns = array_diff($requiredColumns, array_map('strtolower', $header));
+            $missingColumns = array_diff($requiredColumns, $header);
 
             if (!empty($missingColumns)) {
-                return back()->withErrors(['csv_file' => 'Missing required columns: ' . implode(', ', $missingColumns)]);
+                $foundHeaders = implode(', ', array_filter($header, function($h) {
+                    return !empty($h) && !str_starts_with($h, 'column_');
+                }));
+                $missingHeadersList = implode(', ', $missingColumns);
+                return back()->withErrors([
+                    'csv_file' => "Missing required columns: {$missingHeadersList}. Found columns: " . ($foundHeaders ?: 'none') . ". Please use the Excel template downloaded from this page or ensure your file has columns: name, phone1, dob, sex"
+                ]);
             }
 
+            // Normalize row data - handle both CSV and Excel formats
+            $processedRows = [];
+            $actualRowNumber = 2; // Start from row 2 (after header row)
+            
+            foreach ($data as $rowIndex => $row) {
+                $actualRowNumber++; // Increment actual row number in file
+                
+                // Ensure row has same length as header
+                while (count($row) < count($header)) {
+                    $row[] = '';
+                }
+                
+                // Convert row to array and trim all values
+                $row = array_map(function($cell) {
+                    return trim((string)($cell ?? ''));
+                }, array_slice($row, 0, count($header)));
+                
+                // Skip completely empty rows (no data at all)
+                $hasData = false;
+                foreach ($row as $cell) {
+                    if (!empty($cell)) {
+                        $hasData = true;
+                        break;
+                    }
+                }
+                if (!$hasData) {
+                    continue;
+                }
+                
+                $rowData = array_combine($header, $row);
+                
+                // Skip rows that are clearly sample data or instruction rows
+                $firstCell = strtolower(trim($rowData['name'] ?? ''));
+                $allCells = strtolower(implode(' ', array_filter($row, function($cell) {
+                    return !empty($cell);
+                })));
+                
+                if (stripos($firstCell, 'instruction') !== false || 
+                    stripos($firstCell, 'sample') !== false ||
+                    stripos($firstCell, 'n.b') !== false ||
+                    stripos($firstCell, 'note') !== false ||
+                    stripos($allCells, 'instruction') !== false ||
+                    $firstCell === 'john doe' || 
+                    $firstCell === 'jane smith' ||
+                    stripos($firstCell, 'delete') !== false) {
+                    continue;
+                }
+                
+                // Skip rows that are missing all required fields (completely empty row)
+                if (empty($rowData['name']) && empty($rowData['phone1']) && empty($rowData['dob']) && empty($rowData['sex'])) {
+                    continue;
+                }
+                
+                // Store the actual row number for error reporting
+                $rowData['_row_number'] = $actualRowNumber;
+                
+                // Map region/district columns (support both 'region'/'district' and 'region_id'/'district_id')
+                if (isset($rowData['region']) && !empty($rowData['region']) && empty($rowData['region_id'])) {
+                    // Region is provided as name
+                } elseif (isset($rowData['region_id']) && is_numeric($rowData['region_id'])) {
+                    // Region is provided as ID, convert to name if needed
+                    $region = Region::find($rowData['region_id']);
+                    if ($region) {
+                        $rowData['region'] = $region->name;
+                    }
+                }
+                
+                if (isset($rowData['district']) && !empty($rowData['district']) && empty($rowData['district_id'])) {
+                    // District is provided as name
+                } elseif (isset($rowData['district_id']) && is_numeric($rowData['district_id'])) {
+                    // District is provided as ID, convert to name if needed
+                    $district = District::find($rowData['district_id']);
+                    if ($district) {
+                        $rowData['district'] = $district->name;
+                    }
+                }
+                
+                $processedRows[] = $rowData;
+            }
+
+            // Determine if we should use queue job (for large files > 100 rows)
+            $rowCount = count($processedRows);
+            $useQueue = $rowCount > 100;
+
+            if ($useQueue) {
+                // Dispatch to queue job
+                BulkCustomerImportJob::dispatch(
+                    $processedRows,
+                    [
+                        'has_cash_collateral' => $request->has('has_cash_collateral'),
+                        'collateral_type_id' => $request->input('collateral_type_id')
+                    ],
+                    auth()->id(),
+                    auth()->user()->branch_id,
+                    auth()->user()->company_id
+                )->onQueue('default');
+
+                return redirect()->route('customers.index')
+                    ->with('success', "Import job queued successfully. {$rowCount} customers will be processed in the background. You will be notified when complete.");
+            }
+
+            // Process synchronously for smaller files
             $successCount = 0;
             $errorCount = 0;
             $errors = [];
 
             DB::beginTransaction();
 
-            foreach ($data as $rowIndex => $row) {
+            foreach ($processedRows as $rowIndex => $rowData) {
                 try {
-                    $rowData = array_combine(array_map('strtolower', $header), $row);
+                    // Get actual row number from file (if stored)
+                    $actualRowNumber = $rowData['_row_number'] ?? ($rowIndex + 2);
+                    unset($rowData['_row_number']); // Remove from row data
 
                     // Validate required fields
                     if (
                         empty($rowData['name']) || empty($rowData['phone1']) || empty($rowData['dob']) ||
                         empty($rowData['sex'])
                     ) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Missing required fields";
+                        $errors[] = "Row {$actualRowNumber}: Missing required fields (name, phone1, dob, or sex is empty)";
                         $errorCount++;
                         continue;
                     }
 
                     // Validate sex
-                    if (!in_array(strtoupper($rowData['sex']), ['M', 'F'])) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Sex must be M or F";
+                    $sex = strtoupper(trim($rowData['sex'] ?? ''));
+                    if (!in_array($sex, ['M', 'F'])) {
+                        $errors[] = "Row {$actualRowNumber}: Sex must be M or F (got: " . ($rowData['sex'] ?? 'empty') . ")";
                         $errorCount++;
                         continue;
                     }
 
                     // Format phone number for validation
-                    $formattedPhone1 = $this->formatPhoneNumber(trim($rowData["phone1"]));
+                    $formattedPhone1 = $this->formatPhoneNumber(trim($rowData["phone1"] ?? ''));
                     
                     // Validate phone number prefix
                     if (!str_starts_with($formattedPhone1, '255')) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Phone number must start with prefix 255";
+                        $errors[] = "Row {$actualRowNumber}: Phone number must start with prefix 255";
                         $errorCount++;
                         continue;
                     }
@@ -662,7 +906,7 @@ class CustomerController extends Controller
                     // Validate phone number uniqueness
                     $existingCustomer = Customer::where('phone1', $formattedPhone1)->first();
                     if ($existingCustomer) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Phone number already exists";
+                        $errors[] = "Row {$actualRowNumber}: Phone number already exists";
                         $errorCount++;
                         continue;
                     }
@@ -672,32 +916,78 @@ class CustomerController extends Controller
                         $dob = \Carbon\Carbon::parse($rowData['dob']);
                         $age = $dob->age;
                         if ($age < 18) {
-                            $errors[] = "Row " . ($rowIndex + 2) . ": Customer must be at least 18 years old (DOB: " . $rowData['dob'] . ")";
+                            $errors[] = "Row {$actualRowNumber}: Customer must be at least 18 years old (DOB: " . $rowData['dob'] . ", Age: {$age})";
                             $errorCount++;
                             continue;
                         }
                     } catch (\Exception $e) {
-                        $errors[] = "Row " . ($rowIndex + 2) . ": Invalid date of birth format";
+                        $errors[] = "Row {$actualRowNumber}: Invalid date of birth format: " . ($rowData['dob'] ?? 'empty');
                         $errorCount++;
                         continue;
+                    }
+
+                    // Validate region and district
+                    $regionId = null;
+                    $districtId = null;
+                    
+                    if (!empty($rowData['region'])) {
+                        $region = Region::where('name', trim($rowData['region']))->first();
+                        if (!$region) {
+                            $errors[] = "Row {$actualRowNumber}: Invalid region: {$rowData['region']}. Region must exist in the system (from seeders).";
+                            $errorCount++;
+                            continue;
+                        }
+                        $regionId = $region->id;
+
+                        if (!empty($rowData['district'])) {
+                            $district = District::where('name', trim($rowData['district']))
+                                ->where('region_id', $regionId)
+                                ->first();
+                            if (!$district) {
+                                $errors[] = "Row {$actualRowNumber}: Invalid district: {$rowData['district']} for region {$rowData['region']}. District must exist in the system (from seeders).";
+                                $errorCount++;
+                                continue;
+                            }
+                            $districtId = $district->id;
+                        }
+                    } elseif (!empty($rowData['region_id']) && is_numeric($rowData['region_id'])) {
+                        $regionId = $rowData['region_id'];
+                        $region = Region::find($regionId);
+                        if (!$region) {
+                            $errors[] = "Row {$actualRowNumber}: Invalid region_id: {$rowData['region_id']}";
+                            $errorCount++;
+                            continue;
+                        }
+                        
+                        if (!empty($rowData['district_id']) && is_numeric($rowData['district_id'])) {
+                            $districtId = $rowData['district_id'];
+                            $district = District::where('id', $districtId)
+                                ->where('region_id', $regionId)
+                                ->first();
+                            if (!$district) {
+                                $errors[] = "Row {$actualRowNumber}: Invalid district_id: {$rowData['district_id']} for region_id {$regionId}";
+                                $errorCount++;
+                                continue;
+                            }
+                        }
                     }
 
                     // Create customer data
                     $customerData = [
                         // Format phone numbers
                         "phone1" => $formattedPhone1,
-                        "phone2" => !empty($rowData["phone2"]) ? $this->formatPhoneNumber(trim($rowData["phone2"])) : "",
+                        "phone2" => !empty($rowData["phone2"]) ? $this->formatPhoneNumber(trim($rowData["phone2"])) : null,
                         'name' => trim($rowData['name']),
                         'dob' => $rowData['dob'],
-                        'sex' => strtoupper($rowData['sex']),
-                        'region_id' => $rowData['region_id'] ?? null,
-                        'district_id' => $rowData['district_id'] ?? null,
-                        'work' => trim($rowData['work'] ?? ''),
-                        'workAddress' => trim($rowData['workaddress'] ?? ''),
-                        'idType' => trim($rowData['idtype'] ?? ''),
-                        'idNumber' => trim($rowData['idnumber'] ?? ''),
-                        'relation' => trim($rowData['relation'] ?? ''),
-                        'description' => trim($rowData['description'] ?? ''),
+                        'sex' => $sex,
+                        'region_id' => $regionId,
+                        'district_id' => $districtId,
+                        'work' => !empty($rowData['work']) ? trim($rowData['work']) : null,
+                        'workAddress' => !empty($rowData['workaddress']) ? trim($rowData['workaddress']) : null,
+                        'idType' => !empty($rowData['idtype']) ? trim($rowData['idtype']) : null,
+                        'idNumber' => !empty($rowData['idnumber']) ? trim($rowData['idnumber']) : null,
+                        'relation' => !empty($rowData['relation']) ? trim($rowData['relation']) : null,
+                        'description' => !empty($rowData['description']) ? trim($rowData['description']) : null,
                         'customerNo' => 100000 + (Customer::max('id') ?? 0) + 1,
                         'password' => Hash::make('12345'),
                         'branch_id' => auth()->user()->branch_id,
@@ -735,7 +1025,8 @@ class CustomerController extends Controller
 
                     $successCount++;
                 } catch (\Exception $e) {
-                    $errors[] = "Row " . ($rowIndex + 2) . ": " . $e->getMessage();
+                    $actualRowNumber = $rowData['_row_number'] ?? ($rowIndex + 2);
+                    $errors[] = "Row {$actualRowNumber}: " . $e->getMessage();
                     $errorCount++;
                 }
             }
