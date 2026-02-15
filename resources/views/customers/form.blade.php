@@ -53,10 +53,14 @@ $isEdit = isset($customer);
         <!-- Phone 1 -->
         <div class="col-md-6 mb-3">
             <label class="form-label">Phone Number <span class="text-danger">*</span></label>
-            <input type="text" name="phone1" class="form-control @error('phone1') is-invalid @enderror"
+            <input type="text" name="phone1" id="phone1" class="form-control @error('phone1') is-invalid @enderror"
                 value="{{ old('phone1', $customer->phone1 ?? '') }}" placeholder="e.g. 255712345678 or 0712345678">
             <div class="form-text">
                 <i class="bx bx-info-circle"></i> Phone number must start with prefix <strong>255</strong> (e.g., 255712345678). If you enter a number starting with 0, it will be automatically formatted.
+            </div>
+            <div id="phone1-alert" class="alert alert-danger mt-2" style="display: none;">
+                <i class="bx bx-error-circle me-1"></i>
+                <span id="phone1-alert-message"></span>
             </div>
             @error('phone1') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
@@ -121,7 +125,7 @@ $isEdit = isset($customer);
         <!-- ID Type -->
         <div class="col-md-6 mb-3">
             <label class="form-label">ID Type</label>
-            <select name="idType" class="form-select @error('idType') is-invalid @enderror">
+            <select name="idType" id="idType" class="form-select @error('idType') is-invalid @enderror">
                 <option value="">Select ID Type</option>
                 @foreach(['National ID', 'License', 'Voter Registration', 'Other'] as $type)
                 <option value="{{ $type }}" {{ old('idType', $customer->idType ?? '') == $type ? 'selected' : '' }}>
@@ -135,8 +139,13 @@ $isEdit = isset($customer);
         <!-- ID Number -->
         <div class="col-md-6 mb-3">
             <label class="form-label">ID Number</label>
-            <input type="text" name="idNumber" class="form-control @error('idNumber') is-invalid @enderror"
-                value="{{ old('idNumber', $customer->idNumber ?? '') }}">
+            <input type="text" name="idNumber" id="idNumber" class="form-control @error('idNumber') is-invalid @enderror"
+                value="{{ old('idNumber', $customer->idNumber ?? '') }}" placeholder="Enter ID Number">
+            <div id="idNumber-feedback" class="form-text"></div>
+            <div id="idNumber-alert" class="alert alert-danger mt-2" style="display: none;">
+                <i class="bx bx-error-circle me-1"></i>
+                <span id="idNumber-alert-message"></span>
+            </div>
             @error('idNumber') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
@@ -450,29 +459,330 @@ $isEdit = isset($customer);
         const container = document.getElementById('file-type-upload-container');
         const addBtn = document.getElementById('add-filetype-row');
 
-        // Ensure there's always at least one row for new customers
-        if (!container.querySelector('.file-type-upload-row')) {
-            addBtn.click(); // This will add the first row
+        if (container && addBtn) {
+            // Ensure there's always at least one row for new customers
+            if (!container.querySelector('.file-type-upload-row')) {
+                addBtn.click(); // This will add the first row
+            }
+
+            addBtn.addEventListener('click', function() {
+                const row = document.querySelector('.file-type-upload-row');
+                const newRow = row.cloneNode(true);
+
+                // Clear values
+                newRow.querySelector('select').selectedIndex = 0;
+                newRow.querySelector('input[type="file"]').value = '';
+
+                container.appendChild(newRow);
+            });
+
+            container.addEventListener('click', function(e) {
+                if (e.target.closest('.remove-filetype-row')) {
+                    const rows = container.querySelectorAll('.file-type-upload-row');
+                    if (rows.length > 1) {
+                        e.target.closest('.file-type-upload-row').remove();
+                    }
+                }
+            });
+        }
+    });
+
+    // ID Number Formatting and Validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const idTypeSelect = document.getElementById('idType');
+        const idNumberInput = document.getElementById('idNumber');
+        const idNumberFeedback = document.getElementById('idNumber-feedback');
+        const idNumberAlert = document.getElementById('idNumber-alert');
+        const idNumberAlertMessage = document.getElementById('idNumber-alert-message');
+        const phone1Input = document.getElementById('phone1');
+        const phone1Alert = document.getElementById('phone1-alert');
+        const phone1AlertMessage = document.getElementById('phone1-alert-message');
+        const customerId = @json($isEdit ? $customer->id : null);
+        const sexSelect = document.getElementById('sex');
+        const dobInput = document.getElementById('dob');
+        let phoneValidationTimeout;
+        let idValidationTimeout;
+
+        // Format ID number based on ID type
+        function formatIdNumber(value, idType) {
+            // Remove all non-digit characters
+            const digits = value.replace(/\D/g, '');
+            
+            if (idType === 'National ID') {
+                // Format as XXXXXXXX-XXXXX-XXXXX-XX (20 digits: 8-5-5-2)
+                if (digits.length <= 20) {
+                    let formatted = '';
+                    if (digits.length > 0) {
+                        formatted += digits.substring(0, 8);
+                        if (digits.length > 8) {
+                            formatted += '-' + digits.substring(8, 13);
+                            if (digits.length > 13) {
+                                formatted += '-' + digits.substring(13, 18);
+                                if (digits.length > 18) {
+                                    formatted += '-' + digits.substring(18, 20);
+                                }
+                            }
+                        }
+                    }
+                    return formatted || digits;
+                }
+                // Limit to 20 digits
+                const limited = digits.substring(0, 20);
+                return limited.substring(0, 8) + '-' + limited.substring(8, 13) + '-' + limited.substring(13, 18) + '-' + limited.substring(18, 20);
+            } else if (idType === 'License') {
+                // Format as XXXXXXXXX (9 digits, no dashes)
+                if (digits.length <= 9) {
+                    return digits;
+                }
+                return digits.substring(0, 9);
+            } else if (idType === 'Voter Registration') {
+                // Format as XXXXX-XXXXXX-XXX (14 digits: 5-6-3)
+                if (digits.length <= 14) {
+                    let formatted = '';
+                    if (digits.length > 0) {
+                        formatted += digits.substring(0, 5);
+                        if (digits.length > 5) {
+                            formatted += '-' + digits.substring(5, 11);
+                            if (digits.length > 11) {
+                                formatted += '-' + digits.substring(11, 14);
+                            }
+                        }
+                    }
+                    return formatted || digits;
+                }
+                // Limit to 14 digits
+                const limited = digits.substring(0, 14);
+                return limited.substring(0, 5) + '-' + limited.substring(5, 11) + '-' + limited.substring(11, 14);
+            }
+            // For 'Other', return as is
+            return value;
         }
 
-        addBtn.addEventListener('click', function() {
-            const row = document.querySelector('.file-type-upload-row');
-            const newRow = row.cloneNode(true);
+        // Handle ID type change
+        if (idTypeSelect && idNumberInput) {
+            idTypeSelect.addEventListener('change', function() {
+                const idType = this.value;
+                const currentValue = idNumberInput.value.replace(/\D/g, '');
+                
+                if (idType && currentValue) {
+                    idNumberInput.value = formatIdNumber(currentValue, idType);
+                }
+                
+                // Update feedback
+                if (idType === 'National ID') {
+                    idNumberFeedback.innerHTML = '<i class="bx bx-info-circle"></i> Format: XXXXXXXX-XXXXX-XXXXX-XX (20 digits). The first 8 digits should match DOB, and the 19th digit indicates gender (1=Female, 2=Male).';
+                } else if (idType === 'License') {
+                    idNumberFeedback.innerHTML = '<i class="bx bx-info-circle"></i> Format: XXXXXXXXX (9 digits, no dashes)';
+                } else if (idType === 'Voter Registration') {
+                    idNumberFeedback.innerHTML = '<i class="bx bx-info-circle"></i> Format: XXXXX-XXXXXX-XXX (14 digits)';
+                } else if (idType === 'Other') {
+                    idNumberFeedback.innerHTML = '<i class="bx bx-info-circle"></i> Enter ID number without formatting';
+                } else {
+                    idNumberFeedback.innerHTML = '';
+                }
 
-            // Clear values
-            newRow.querySelector('select').selectedIndex = 0;
-            newRow.querySelector('input[type="file"]').value = '';
+                // Validate National ID if type is National ID and ID number exists
+                if (idType === 'National ID' && idNumberInput.value) {
+                    setTimeout(() => {
+                        validateNationalId(idNumberInput.value);
+                    }, 100);
+                } else if (idType !== 'National ID') {
+                    // Clear National ID specific warnings when switching away
+                    if (idNumberAlert.className.includes('alert-warning')) {
+                        idNumberAlert.style.display = 'none';
+                    }
+                }
+            });
 
-            container.appendChild(newRow);
-        });
+            // Handle ID number input with formatting
+            idNumberInput.addEventListener('input', function(e) {
+                const idType = idTypeSelect.value;
+                const cursorPosition = this.selectionStart;
+                const originalLength = this.value.length;
+                
+                if (idType && idType !== 'Other') {
+                    const formatted = formatIdNumber(this.value, idType);
+                    this.value = formatted;
+                    
+                    // Adjust cursor position
+                    const newLength = this.value.length;
+                    const lengthDiff = newLength - originalLength;
+                    this.setSelectionRange(cursorPosition + lengthDiff, cursorPosition + lengthDiff);
+                }
+                
+                // Validate uniqueness and National ID format
+                clearTimeout(idValidationTimeout);
+                idValidationTimeout = setTimeout(() => {
+                    validateIdNumber(this.value);
+                    if (idType === 'National ID') {
+                        validateNationalId(this.value);
+                    }
+                }, 500);
+            });
 
-        container.addEventListener('click', function(e) {
-            if (e.target.closest('.remove-filetype-row')) {
-                const rows = container.querySelectorAll('.file-type-upload-row');
-                if (rows.length > 1) {
-                    e.target.closest('.file-type-upload-row').remove();
+            // Validate National ID format (DOB and Gender)
+            function validateNationalId(idNumber) {
+                if (!idNumber || idTypeSelect.value !== 'National ID') {
+                    return;
+                }
+
+                // Remove formatting to get digits only
+                const digits = idNumber.replace(/\D/g, '');
+                
+                // Need at least 19 digits to validate gender (19th digit)
+                if (digits.length < 19) {
+                    return;
+                }
+
+                const errors = [];
+
+                // Extract first 8 digits (birth year + system code)
+                const first8Digits = digits.substring(0, 8);
+                
+                // Extract 19th digit (gender indicator: 1 = Female, 2 = Male)
+                const genderDigit = digits.charAt(18); // 19th digit (0-indexed: position 18)
+
+                // Validate DOB match with first 8 digits
+                if (dobInput && dobInput.value) {
+                    const dob = new Date(dobInput.value);
+                    const birthYear = dob.getFullYear();
+                    const birthYearLast2 = String(birthYear).substring(2); // Last 2 digits of year (e.g., "95" for 1995)
+                    
+                    // Tanzanian National ID: First 8 digits typically contain:
+                    // - Birth year (last 2 digits) usually at positions 0-1 or 2-3
+                    // - System/region codes
+                    // Check if the birth year (last 2 digits) appears in the first 8 digits
+                    if (!first8Digits.includes(birthYearLast2)) {
+                        errors.push(`The first 8 digits of the National ID (${first8Digits}) do not appear to match the date of birth year (${birthYear}). Please verify.`);
+                    }
+                }
+
+                // Validate gender match
+                if (sexSelect && sexSelect.value) {
+                    const selectedSex = sexSelect.value; // 'M' or 'F'
+                    const expectedGenderDigit = selectedSex === 'F' ? '1' : '2';
+                    
+                    if (genderDigit !== expectedGenderDigit) {
+                        if (genderDigit === '1') {
+                            errors.push('The National ID indicates Female (digit 1), but you selected Male. Please verify.');
+                        } else if (genderDigit === '2') {
+                            errors.push('The National ID indicates Male (digit 2), but you selected Female. Please verify.');
+                        } else {
+                            errors.push('The gender digit in the National ID (19th digit) does not match the selected sex.');
+                        }
+                    }
+                }
+
+                // Display errors
+                if (errors.length > 0) {
+                    idNumberAlertMessage.textContent = errors.join(' ');
+                    idNumberAlert.style.display = 'block';
+                    idNumberAlert.className = 'alert alert-warning mt-2';
+                } else {
+                    // Clear gender/DOB warnings but keep uniqueness check
+                    if (idNumberAlert.className.includes('alert-warning')) {
+                        idNumberAlert.style.display = 'none';
+                    }
                 }
             }
-        });
+
+            // Validate when DOB changes
+            if (dobInput) {
+                dobInput.addEventListener('change', function() {
+                    if (idTypeSelect.value === 'National ID' && idNumberInput.value) {
+                        validateNationalId(idNumberInput.value);
+                    }
+                });
+            }
+
+            // Validate when sex changes
+            if (sexSelect) {
+                sexSelect.addEventListener('change', function() {
+                    if (idTypeSelect.value === 'National ID' && idNumberInput.value) {
+                        validateNationalId(idNumberInput.value);
+                    }
+                });
+            }
+
+            // Validate ID number uniqueness
+            function validateIdNumber(idNumber) {
+                if (!idNumber || idNumber.trim() === '') {
+                    idNumberAlert.style.display = 'none';
+                    return;
+                }
+
+                fetch('{{ route("customers.validate-id") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        idNumber: idNumber,
+                        customerId: customerId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        idNumberAlertMessage.textContent = 'This ID number is already registered to another customer.';
+                        idNumberAlert.style.display = 'block';
+                        idNumberAlert.className = 'alert alert-danger mt-2';
+                    } else {
+                        idNumberAlert.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error validating ID number:', error);
+                });
+            }
+        }
+
+        // Validate phone number uniqueness
+        if (phone1Input) {
+            phone1Input.addEventListener('input', function() {
+                clearTimeout(phoneValidationTimeout);
+                phoneValidationTimeout = setTimeout(() => {
+                    validatePhoneNumber(this.value);
+                }, 500);
+            });
+
+            function validatePhoneNumber(phone) {
+                if (!phone || phone.trim() === '') {
+                    phone1Alert.style.display = 'none';
+                    return;
+                }
+
+                fetch('{{ route("customers.validate-phone") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        customerId: customerId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        phone1AlertMessage.textContent = 'This phone number is already registered to another customer.';
+                        phone1Alert.style.display = 'block';
+                        phone1Alert.className = 'alert alert-danger mt-2';
+                    } else {
+                        phone1Alert.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error validating phone number:', error);
+                });
+            }
+        }
+
+        // Initialize feedback on page load
+        if (idTypeSelect && idNumberFeedback) {
+            idTypeSelect.dispatchEvent(new Event('change'));
+        }
     });
 </script>

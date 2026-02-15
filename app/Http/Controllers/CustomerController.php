@@ -199,7 +199,25 @@ class CustomerController extends Controller
             'work' => 'nullable|string|max:255',
             'workAddress' => 'nullable|string|max:500',
             'idType' => 'nullable|string|max:100',
-            'idNumber' => 'nullable|string|max:100',
+            'idNumber' => [
+                'nullable',
+                'string',
+                'max:100',
+                function ($attribute, $value, $fail) {
+                    if (!empty($value)) {
+                        // Remove formatting for uniqueness check
+                        $idNumber = preg_replace('/[^0-9A-Za-z]/', '', $value);
+                        $exists = Customer::whereRaw('REPLACE(REPLACE(idNumber, "-", ""), " ", "") = ?', [$idNumber])
+                            ->whereNotNull('idNumber')
+                            ->where('idNumber', '!=', '')
+                            ->exists();
+                        
+                        if ($exists) {
+                            $fail('This ID number is already registered to another customer.');
+                        }
+                    }
+                },
+            ],
             'relation' => 'nullable|string|max:255',
             'category' => 'required|in:Guarantor,Borrower',
             'group_id' => 'nullable|exists:groups,id',
@@ -401,7 +419,26 @@ class CustomerController extends Controller
             'work' => 'nullable|string|max:255',
             'workAddress' => 'nullable|string|max:500',
             'idType' => 'nullable|string|max:100',
-            'idNumber' => 'nullable|string|max:100',
+            'idNumber' => [
+                'nullable',
+                'string',
+                'max:100',
+                function ($attribute, $value, $fail) use ($customer) {
+                    if (!empty($value)) {
+                        // Remove formatting for uniqueness check
+                        $idNumber = preg_replace('/[^0-9A-Za-z]/', '', $value);
+                        $exists = Customer::whereRaw('REPLACE(REPLACE(idNumber, "-", ""), " ", "") = ?', [$idNumber])
+                            ->where('id', '!=', $customer->id)
+                            ->whereNotNull('idNumber')
+                            ->where('idNumber', '!=', '')
+                            ->exists();
+                        
+                        if ($exists) {
+                            $fail('This ID number is already registered to another customer.');
+                        }
+                    }
+                },
+            ],
             'relation' => 'nullable|string|max:255',
             'category' => 'required|in:Guarantor,Borrower',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
@@ -1407,6 +1444,54 @@ class CustomerController extends Controller
         return response()->streamDownload(function () use ($disk, $pivot) {
             echo $disk->get($pivot->document_path);
         }, $filename);
+    }
+
+    /**
+     * Validate phone number uniqueness
+     */
+    public function validatePhone(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+            'customerId' => 'nullable|integer'
+        ]);
+
+        $phone = $this->formatPhoneNumber($request->phone);
+        $query = Customer::where('phone1', $phone);
+
+        if ($request->customerId) {
+            $query->where('id', '!=', $request->customerId);
+        }
+
+        $exists = $query->exists();
+
+        return response()->json(['exists' => $exists]);
+    }
+
+    /**
+     * Validate ID number uniqueness
+     */
+    public function validateId(Request $request)
+    {
+        $request->validate([
+            'idNumber' => 'required|string',
+            'customerId' => 'nullable|integer'
+        ]);
+
+        // Remove formatting (dashes) for comparison
+        $idNumber = preg_replace('/[^0-9A-Za-z]/', '', $request->idNumber);
+        
+        $query = Customer::whereRaw('REPLACE(REPLACE(idNumber, "-", ""), " ", "") = ?', [$idNumber])
+            ->whereNotNull('idNumber')
+            ->where('idNumber', '!=', '');
+
+        if ($request->customerId) {
+            $query->where('id', '!=', $request->customerId);
+        }
+
+        $exists = $query->exists();
+
+        return response()->json(['exists' => $exists]);
     }
 
 }
