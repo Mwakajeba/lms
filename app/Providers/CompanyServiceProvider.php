@@ -35,7 +35,10 @@ class CompanyServiceProvider extends ServiceProvider
         Builder::macro('forBranch', function ($branchId = null) {
             $branchId = $branchId ?? config('app.current_branch_id');
             
-            if ($branchId && $this->getModel()->getTable() !== 'branches') {
+            // Exclude tables that don't have branch_id column (use pivot tables instead)
+            $excludedTables = ['bank_accounts', 'branches'];
+            
+            if ($branchId && !in_array($this->getModel()->getTable(), $excludedTables)) {
                 return $this->where('branch_id', $branchId);
             }
             
