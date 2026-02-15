@@ -787,6 +787,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('customers/penalty', [CustomerController::class, 'penaltList'])->name('customers.penalty');
     Route::get('customers/create', [CustomerController::class, 'create'])->name('customers.create');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
+    Route::post('customers/validate-phone', [CustomerController::class, 'validatePhone'])->name('customers.validate-phone');
+    Route::post('customers/validate-id', [CustomerController::class, 'validateId'])->name('customers.validate-id');
 
     // Bulk upload routes (must come before parameterized routes)
     Route::get('customers/bulk-upload', [CustomerController::class, 'bulkUpload'])->name('customers.bulk-upload');
