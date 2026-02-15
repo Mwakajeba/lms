@@ -12,6 +12,7 @@ use App\Models\Journal;
 use App\Models\Payment;
 use App\Models\Penalty;
 use App\Models\Receipt;
+use App\Models\Repayment;
 use App\Services\LoanPenaltyService;
 
 class DashboardController extends Controller
@@ -339,6 +340,58 @@ class DashboardController extends Controller
         // Get previous year comparative data
         $previousYearData = $this->getPreviousYearData($selectedBranchId, $userBranchIds);
 
+        // Get pending deletion requests (only for super-admin)
+        $pendingDeletionRequests = [];
+        if ($user->role === 'super-admin') {
+            $pendingRepayments = Repayment::withTrashed()
+                ->whereNotNull('deleted_at')
+                ->where('deleted_approved', false)
+                ->with(['loan.customer', 'user'])
+                ->latest('deleted_at')
+                ->take(10)
+                ->get()
+                ->map(function ($repayment) {
+                    return [
+                        'id' => $repayment->id,
+                        'type' => 'Repayment',
+                        'amount' => $repayment->amount_paid,
+                        'customer' => $repayment->loan->customer->name ?? 'N/A',
+                        'loan_no' => $repayment->loan->loanNo ?? 'N/A',
+                        'reason' => $repayment->deletion_reason,
+                        'deleted_at' => $repayment->deleted_at,
+                        'deleted_by' => $repayment->user->name ?? 'N/A',
+                    ];
+                });
+
+            $pendingReceipts = Receipt::withTrashed()
+                ->whereNotNull('deleted_at')
+                ->where('deleted_approved', false)
+                ->where('reference_type', 'Deposit')
+                ->with(['customer', 'user'])
+                ->latest('deleted_at')
+                ->take(10)
+                ->get()
+                ->map(function ($receipt) {
+                    return [
+                        'id' => $receipt->id,
+                        'type' => 'Deposit',
+                        'amount' => $receipt->amount,
+                        'customer' => $receipt->customer->name ?? 'N/A',
+                        'loan_no' => 'N/A',
+                        'reason' => $receipt->deletion_reason,
+                        'deleted_at' => $receipt->deleted_at,
+                        'deleted_by' => $receipt->user->name ?? 'N/A',
+                    ];
+                });
+
+            $pendingDeletionRequests = $pendingRepayments->concat($pendingReceipts)
+                ->sortByDesc('deleted_at')
+                ->take(10)
+                ->values();
+        }
+
+        $pendingDeletionCount = count($pendingDeletionRequests);
+
         return view('dashboard', compact(
             'balanceSheetData',
             'financialReportData',
@@ -359,7 +412,9 @@ class DashboardController extends Controller
             'paidInterest',
             'outstandingInterestDetailed',
             'branches',
-            'selectedBranchId'
+            'selectedBranchId',
+            'pendingDeletionRequests',
+            'pendingDeletionCount'
         ));
     }
     

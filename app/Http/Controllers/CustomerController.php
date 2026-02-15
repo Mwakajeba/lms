@@ -16,6 +16,7 @@ use App\Models\CashCollateralType;
 use App\Models\Filetype;
 use App\Services\LoanPenaltyService;
 use App\Exports\CustomerImportTemplateExport;
+use App\Exports\FailedCustomerRecordsExport;
 use App\Jobs\BulkCustomerImportJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -645,7 +646,7 @@ class CustomerController extends Controller
     public function bulkUploadStore(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:10240', // 10MB max, support Excel
+            'csv_file' => 'required|file|mimes:xlsx,xls|max:10240', // 10MB max, Excel only
             'has_cash_collateral' => 'nullable|boolean',
             'collateral_type_id' => 'nullable|exists:cash_collateral_types,id',
         ]);
@@ -659,29 +660,22 @@ class CustomerController extends Controller
             $path = $file->getRealPath();
             $extension = strtolower($file->getClientOriginalExtension());
 
-            // Read file based on extension
-            if (in_array($extension, ['xlsx', 'xls'])) {
-                $spreadsheet = IOFactory::load($path);
-                $sheet = $spreadsheet->getActiveSheet();
-                $rows = $sheet->toArray(null, true, true, false);
-                
-                // Filter out completely empty rows
-                $data = array_filter($rows, function($row) {
-                    return !empty(array_filter($row, function($cell) {
-                        return trim((string)$cell) !== '';
-                    }));
-                });
-                $data = array_values($data); // Re-index array
-            } else {
-                $data = array_map('str_getcsv', file($path));
-                // Filter out empty rows
-                $data = array_filter($data, function($row) {
-                    return !empty(array_filter($row, function($cell) {
-                        return trim((string)$cell) !== '';
-                    }));
-                });
-                $data = array_values($data); // Re-index array
+            // Read Excel file
+            if (!in_array($extension, ['xlsx', 'xls'])) {
+                return back()->withErrors(['csv_file' => 'Only Excel files (.xlsx or .xls) are allowed.']);
             }
+
+            $spreadsheet = IOFactory::load($path);
+            $sheet = $spreadsheet->getActiveSheet();
+            $rows = $sheet->toArray(null, true, true, false);
+            
+            // Filter out completely empty rows
+            $data = array_filter($rows, function($row) {
+                return !empty(array_filter($row, function($cell) {
+                    return trim((string)$cell) !== '';
+                }));
+            });
+            $data = array_values($data); // Re-index array
 
             if (empty($data)) {
                 return back()->withErrors(['csv_file' => 'The file is empty or contains no valid data.']);
@@ -903,6 +897,7 @@ class CustomerController extends Controller
             $successCount = 0;
             $errorCount = 0;
             $errors = [];
+            $failedRecords = []; // Store failed records with original data and error reasons
 
             DB::beginTransaction();
 
@@ -910,6 +905,7 @@ class CustomerController extends Controller
                 try {
                     // Get actual row number from file (if stored)
                     $actualRowNumber = $rowData['_row_number'] ?? ($rowIndex + 2);
+                    $originalRowData = $rowData; // Keep original for failed records
                     unset($rowData['_row_number']); // Remove from row data
 
                     // Validate required fields
@@ -917,7 +913,13 @@ class CustomerController extends Controller
                         empty($rowData['name']) || empty($rowData['phone1']) || empty($rowData['dob']) ||
                         empty($rowData['sex'])
                     ) {
-                        $errors[] = "Row {$actualRowNumber}: Missing required fields (name, phone1, dob, or sex is empty)";
+                        $errorMsg = "Missing required fields (name, phone1, dob, or sex is empty)";
+                        $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $actualRowNumber,
+                            'data' => $originalRowData,
+                            'error' => $errorMsg
+                        ];
                         $errorCount++;
                         continue;
                     }
@@ -925,7 +927,13 @@ class CustomerController extends Controller
                     // Validate sex
                     $sex = strtoupper(trim($rowData['sex'] ?? ''));
                     if (!in_array($sex, ['M', 'F'])) {
-                        $errors[] = "Row {$actualRowNumber}: Sex must be M or F (got: " . ($rowData['sex'] ?? 'empty') . ")";
+                        $errorMsg = "Sex must be M or F (got: " . ($rowData['sex'] ?? 'empty') . ")";
+                        $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $actualRowNumber,
+                            'data' => $originalRowData,
+                            'error' => $errorMsg
+                        ];
                         $errorCount++;
                         continue;
                     }
@@ -935,7 +943,13 @@ class CustomerController extends Controller
                     
                     // Validate phone number prefix
                     if (!str_starts_with($formattedPhone1, '255')) {
-                        $errors[] = "Row {$actualRowNumber}: Phone number must start with prefix 255";
+                        $errorMsg = "Phone number must start with prefix 255";
+                        $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $actualRowNumber,
+                            'data' => $originalRowData,
+                            'error' => $errorMsg
+                        ];
                         $errorCount++;
                         continue;
                     }
@@ -943,9 +957,38 @@ class CustomerController extends Controller
                     // Validate phone number uniqueness
                     $existingCustomer = Customer::where('phone1', $formattedPhone1)->first();
                     if ($existingCustomer) {
-                        $errors[] = "Row {$actualRowNumber}: Phone number already exists";
+                        $errorMsg = "Phone number already exists";
+                        $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $actualRowNumber,
+                            'data' => $originalRowData,
+                            'error' => $errorMsg
+                        ];
                         $errorCount++;
                         continue;
+                    }
+
+                    // Validate ID number uniqueness if provided
+                    if (!empty($rowData['idnumber'])) {
+                        $idNumber = preg_replace('/[^0-9A-Za-z]/', '', trim($rowData['idnumber']));
+                        if (!empty($idNumber)) {
+                            $existingId = Customer::whereRaw('REPLACE(REPLACE(idNumber, "-", ""), " ", "") = ?', [$idNumber])
+                                ->whereNotNull('idNumber')
+                                ->where('idNumber', '!=', '')
+                                ->first();
+                            
+                            if ($existingId) {
+                                $errorMsg = "ID number already exists";
+                                $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                                $failedRecords[] = [
+                                    'row_number' => $actualRowNumber,
+                                    'data' => $originalRowData,
+                                    'error' => $errorMsg
+                                ];
+                                $errorCount++;
+                                continue;
+                            }
+                        }
                     }
 
                     // Validate age (must be at least 18 years old)
@@ -953,12 +996,24 @@ class CustomerController extends Controller
                         $dob = \Carbon\Carbon::parse($rowData['dob']);
                         $age = $dob->age;
                         if ($age < 18) {
-                            $errors[] = "Row {$actualRowNumber}: Customer must be at least 18 years old (DOB: " . $rowData['dob'] . ", Age: {$age})";
+                            $errorMsg = "Customer must be at least 18 years old (DOB: " . $rowData['dob'] . ", Age: {$age})";
+                            $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                            $failedRecords[] = [
+                                'row_number' => $actualRowNumber,
+                                'data' => $originalRowData,
+                                'error' => $errorMsg
+                            ];
                             $errorCount++;
                             continue;
                         }
                     } catch (\Exception $e) {
-                        $errors[] = "Row {$actualRowNumber}: Invalid date of birth format: " . ($rowData['dob'] ?? 'empty');
+                        $errorMsg = "Invalid date of birth format: " . ($rowData['dob'] ?? 'empty');
+                        $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $actualRowNumber,
+                            'data' => $originalRowData,
+                            'error' => $errorMsg
+                        ];
                         $errorCount++;
                         continue;
                     }
@@ -970,7 +1025,13 @@ class CustomerController extends Controller
                     if (!empty($rowData['region'])) {
                         $region = Region::where('name', trim($rowData['region']))->first();
                         if (!$region) {
-                            $errors[] = "Row {$actualRowNumber}: Invalid region: {$rowData['region']}. Region must exist in the system (from seeders).";
+                            $errorMsg = "Invalid region: {$rowData['region']}. Region must exist in the system (from seeders).";
+                            $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                            $failedRecords[] = [
+                                'row_number' => $actualRowNumber,
+                                'data' => $originalRowData,
+                                'error' => $errorMsg
+                            ];
                             $errorCount++;
                             continue;
                         }
@@ -981,7 +1042,13 @@ class CustomerController extends Controller
                                 ->where('region_id', $regionId)
                                 ->first();
                             if (!$district) {
-                                $errors[] = "Row {$actualRowNumber}: Invalid district: {$rowData['district']} for region {$rowData['region']}. District must exist in the system (from seeders).";
+                                $errorMsg = "Invalid district: {$rowData['district']} for region {$rowData['region']}. District must exist in the system (from seeders).";
+                                $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                                $failedRecords[] = [
+                                    'row_number' => $actualRowNumber,
+                                    'data' => $originalRowData,
+                                    'error' => $errorMsg
+                                ];
                                 $errorCount++;
                                 continue;
                             }
@@ -991,7 +1058,13 @@ class CustomerController extends Controller
                         $regionId = $rowData['region_id'];
                         $region = Region::find($regionId);
                         if (!$region) {
-                            $errors[] = "Row {$actualRowNumber}: Invalid region_id: {$rowData['region_id']}";
+                            $errorMsg = "Invalid region_id: {$rowData['region_id']}";
+                            $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                            $failedRecords[] = [
+                                'row_number' => $actualRowNumber,
+                                'data' => $originalRowData,
+                                'error' => $errorMsg
+                            ];
                             $errorCount++;
                             continue;
                         }
@@ -1002,7 +1075,13 @@ class CustomerController extends Controller
                                 ->where('region_id', $regionId)
                                 ->first();
                             if (!$district) {
-                                $errors[] = "Row {$actualRowNumber}: Invalid district_id: {$rowData['district_id']} for region_id {$regionId}";
+                                $errorMsg = "Invalid district_id: {$rowData['district_id']} for region_id {$regionId}";
+                                $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                                $failedRecords[] = [
+                                    'row_number' => $actualRowNumber,
+                                    'data' => $originalRowData,
+                                    'error' => $errorMsg
+                                ];
                                 $errorCount++;
                                 continue;
                             }
@@ -1062,15 +1141,27 @@ class CustomerController extends Controller
 
                     $successCount++;
                 } catch (\Exception $e) {
-                    $actualRowNumber = $rowData['_row_number'] ?? ($rowIndex + 2);
-                    $errors[] = "Row {$actualRowNumber}: " . $e->getMessage();
+                    $actualRowNumber = $originalRowData['_row_number'] ?? ($rowIndex + 2);
+                    $errorMsg = $e->getMessage();
+                    $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
+                    $failedRecords[] = [
+                        'row_number' => $actualRowNumber,
+                        'data' => $originalRowData,
+                        'error' => $errorMsg
+                    ];
                     $errorCount++;
                 }
             }
 
             if ($errorCount > 0) {
                 DB::rollBack();
-                return back()->withErrors(['csv_file' => 'Upload completed with errors. ' . $errorCount . ' rows failed.'])->with('upload_errors', $errors);
+                // Store failed records in session for export
+                session(['failed_customer_records' => $failedRecords]);
+                return back()
+                    ->withErrors(['csv_file' => 'Upload completed with errors. ' . $errorCount . ' rows failed.'])
+                    ->with('upload_errors', $errors)
+                    ->with('failed_count', $errorCount)
+                    ->with('success_count', $successCount);
             }
 
             DB::commit();
@@ -1085,6 +1176,20 @@ class CustomerController extends Controller
             DB::rollBack();
             return back()->withErrors(['csv_file' => 'Failed to process CSV file: ' . $e->getMessage()]);
         }
+    }
+
+    // Export failed customer records
+    public function exportFailedRecords()
+    {
+        $failedRecords = session('failed_customer_records', []);
+        
+        if (empty($failedRecords)) {
+            return back()->withErrors(['error' => 'No failed records to export.']);
+        }
+
+        $filename = 'failed_customer_records_' . date('Y-m-d_His') . '.xlsx';
+        
+        return Excel::download(new FailedCustomerRecordsExport($failedRecords), $filename);
     }
 
     // Download sample CSV

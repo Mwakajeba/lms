@@ -118,7 +118,7 @@ class Loan extends Model
 
     public function repayments()
     {
-        return $this->hasMany(Repayment::class, 'loan_id');
+        return $this->hasMany(Repayment::class, 'loan_id')->withTrashed();
     }
 
     public function loanFiles()

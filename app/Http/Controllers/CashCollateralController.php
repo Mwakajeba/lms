@@ -129,7 +129,8 @@ class CashCollateralController extends Controller
         // Handle Ajax request for DataTables
         if (request()->ajax()) {
             //////////////////// GET DEPOSIT TRANSACTION FOR CASH COLLATERAL OF CUSTOMER(RECIEPTS)////////////////////////////////////////////
-            $deposits = Receipt::where('reference', $cashCollateral->id)
+            $deposits = Receipt::withTrashed()
+                ->where('reference', $cashCollateral->id)
                 ->where('reference_type', 'Deposit')
                 ->with(['bankAccount', 'user'])
                 ->get()
@@ -144,6 +145,8 @@ class CashCollateralController extends Controller
                         'bank_account' => $receipt->bankAccount->name ?? 'N/A',
                         'user' => $receipt->user->name ?? 'N/A',
                         'created_at' => $receipt->created_at,
+                        'deleted_at' => $receipt->deleted_at,
+                        'deleted_approved' => $receipt->deleted_approved,
                     ];
                 });
 
@@ -182,64 +185,117 @@ class CashCollateralController extends Controller
             });
 
             return datatables($transactions)
+                ->addColumn('DT_RowClass', function ($transaction) {
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
+                    return $isDeleted ? 'table-danger' : '';
+                })
                 ->addColumn('formatted_date', function ($transaction) {
-                    return $transaction['date']->format('d/m/Y');
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
+                    $date = $transaction['date']->format('d/m/Y');
+                    return $isDeleted ? '<del class="text-danger">' . $date . '</del>' : $date;
                 })
                 ->addColumn('type_badge', function ($transaction) {
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
                     if ($transaction['type'] === 'Deposit') {
-                        return '<span class="badge bg-success"><i class="bx bx-plus me-1"></i> Deposit</span>';
+                        $badge = '<span class="badge bg-success"><i class="bx bx-plus me-1"></i> Deposit</span>';
+                        return $isDeleted ? '<del class="text-danger">' . $badge . '</del>' : $badge;
                     } else {
-                        return '<span class="badge bg-warning"><i class="bx bx-minus me-1"></i> Withdrawal</span>';
+                        $badge = '<span class="badge bg-warning"><i class="bx bx-minus me-1"></i> Withdrawal</span>';
+                        return $isDeleted ? '<del class="text-danger">' . $badge . '</del>' : $badge;
                     }
                 })
                 ->addColumn('formatted_amount', function ($transaction) {
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
                     $class = $transaction['type'] === 'Deposit' ? 'text-success' : 'text-danger';
-                    return '<span class="fw-bold ' . $class . '">TSHS ' . number_format($transaction['amount'], 2) . '</span>';
+                    $amount = '<span class="fw-bold ' . $class . '">TSHS ' . number_format($transaction['amount'], 2) . '</span>';
+                    return $isDeleted ? '<del class="text-danger">' . $amount . '</del>' : $amount;
                 })
                 ->addColumn('formatted_balance', function ($transaction) {
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
                     $class = $transaction['balance'] >= 0 ? 'text-success' : 'text-danger';
-                    return '<span class="fw-bold ' . $class . '">TSHS ' . number_format($transaction['balance'], 2) . '</span>';
+                    $balance = '<span class="fw-bold ' . $class . '">TSHS ' . number_format($transaction['balance'], 2) . '</span>';
+                    return $isDeleted ? '<del class="text-danger">' . $balance . '</del>' : $balance;
                 })
                 ->addColumn('actions', function ($transaction) {
                     $encodedId = Hashids::encode($transaction['id']);
+                    $isDeleted = isset($transaction['deleted_at']) && $transaction['deleted_at'] !== null;
                     $actions = '';
                     
-                    // Print Receipt Button
-                    if ($transaction['type'] === 'Deposit') {
-                        $actions .= '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="printDepositReceiptFromTable(' . $transaction['id'] . ')" title="Print Receipt">
-                                        <i class="bx bx-printer"></i>
-                                    </button>';
-                    } else {
-                        $actions .= '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="printWithdrawalReceiptFromTable(' . $transaction['id'] . ')" title="Print Receipt">
-                                        <i class="bx bx-printer"></i>
-                                    </button>';
-                    }
-                    
-                    // Edit Button
-                    if (auth()->user()->can('edit transaction')) {
-                        if ($transaction['type'] === 'Deposit') {
-                            $actions .= '<a href="' . route('receipts.edit', $encodedId) . '" class="btn btn-sm btn-outline-warning me-1" title="Edit ' . $transaction['type'] . '">
-                                            <i class="bx bx-edit"></i>
-                                        </a>';
+                    if ($isDeleted) {
+                        // Show approval/restore buttons for deleted transactions
+                        if (auth()->user()->role === 'super-admin') {
+                            if (!$transaction['deleted_approved']) {
+                                $actions .= '<button type="button" class="btn btn-sm btn-outline-success me-1" 
+                                                onclick="approveDeleteDeposit(' . $transaction['id'] . ')" 
+                                                title="Approve Deletion">
+                                                <i class="bx bx-check"></i> Approve
+                                            </button>';
+                            }
+                            $actions .= '<button type="button" class="btn btn-sm btn-outline-primary me-1" 
+                                            onclick="restoreDeposit(' . $transaction['id'] . ')" 
+                                            title="Restore Deposit">
+                                            <i class="bx bx-undo"></i> Restore
+                                        </button>';
+                            if (isset($transaction['deletion_reason']) && $transaction['deletion_reason']) {
+                                $actions .= '<button type="button" class="btn btn-sm btn-outline-info me-1" 
+                                                onclick="showDeletionReason(\'' . addslashes($transaction['deletion_reason']) . '\')" 
+                                                title="View Deletion Reason">
+                                                <i class="bx bx-info-circle"></i>
+                                            </button>';
+                            }
                         } else {
-                            $actions .= '<a href="' . route('payments.edit', $encodedId) . '" class="btn btn-sm btn-outline-warning me-1" title="Edit ' . $transaction['type'] . '">
-                                            <i class="bx bx-edit"></i>
-                                        </a>';
+                            if ($transaction['deleted_approved']) {
+                                $actions .= '<span class="badge bg-success">Approved</span>';
+                            } else {
+                                $actions .= '<span class="badge bg-warning">Pending</span>';
+                            }
+                            if (isset($transaction['deletion_reason']) && $transaction['deletion_reason']) {
+                                $actions .= '<button type="button" class="btn btn-sm btn-outline-info me-1" 
+                                                onclick="showDeletionReason(\'' . addslashes($transaction['deletion_reason']) . '\')" 
+                                                title="View Deletion Reason">
+                                                <i class="bx bx-info-circle"></i>
+                                            </button>';
+                            }
                         }
-                    }
-                    
-                    // Delete Button
-                    if (auth()->user()->can('delete transaction')) {
-                        $actions .= '<button type="button" class="btn btn-sm btn-outline-danger" 
-                                        onclick="deleteTransaction(\'' . $encodedId . '\', \'' . $transaction['type'] . '\', \'' . $transaction['transaction_type'] . '\')" 
-                                        title="Delete Transaction">
-                                        <i class="bx bx-trash"></i>
-                                    </button>';
+                    } else {
+                        // Normal actions for non-deleted transactions
+                        // Print Receipt Button
+                        if ($transaction['type'] === 'Deposit') {
+                            $actions .= '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="printDepositReceiptFromTable(' . $transaction['id'] . ')" title="Print Receipt">
+                                            <i class="bx bx-printer"></i>
+                                        </button>';
+                        } else {
+                            $actions .= '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="printWithdrawalReceiptFromTable(' . $transaction['id'] . ')" title="Print Receipt">
+                                            <i class="bx bx-printer"></i>
+                                        </button>';
+                        }
+                        
+                        // Edit Button
+                        if (auth()->user()->can('edit transaction')) {
+                            if ($transaction['type'] === 'Deposit') {
+                                $actions .= '<a href="' . route('receipts.edit', $encodedId) . '" class="btn btn-sm btn-outline-warning me-1" title="Edit ' . $transaction['type'] . '">
+                                                <i class="bx bx-edit"></i>
+                                            </a>';
+                            } else {
+                                $actions .= '<a href="' . route('payments.edit', $encodedId) . '" class="btn btn-sm btn-outline-warning me-1" title="Edit ' . $transaction['type'] . '">
+                                                <i class="bx bx-edit"></i>
+                                            </a>';
+                            }
+                        }
+                        
+                        // Delete Button
+                        if (auth()->user()->can('delete transaction')) {
+                            $actions .= '<button type="button" class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteTransaction(\'' . $encodedId . '\', \'' . $transaction['type'] . '\', \'' . $transaction['transaction_type'] . '\')" 
+                                            title="Delete Transaction">
+                                            <i class="bx bx-trash"></i>
+                                        </button>';
+                        }
                     }
                     
                     return $actions;
                 })
-                ->rawColumns(['type_badge', 'formatted_amount', 'formatted_balance', 'actions'])
+                ->rawColumns(['type_badge', 'formatted_amount', 'formatted_balance', 'actions', 'formatted_date'])
                 ->make(true);
         }
 
@@ -256,11 +312,14 @@ class CashCollateralController extends Controller
                     'amount' => $receipt->amount,
                     'type' => 'Deposit',
                     'transaction_type' => 'receipt',
-                    'bank_account' => $receipt->bankAccount->name ?? 'N/A',
-                    'user' => $receipt->user->name ?? 'N/A',
-                    'created_at' => $receipt->created_at,
-                ];
-            });
+                        'bank_account' => $receipt->bankAccount->name ?? 'N/A',
+                        'user' => $receipt->user->name ?? 'N/A',
+                        'created_at' => $receipt->created_at,
+                        'deleted_at' => $receipt->deleted_at,
+                        'deleted_approved' => $receipt->deleted_approved,
+                        'deletion_reason' => $receipt->deletion_reason,
+                    ];
+                });
 
         // ////////GET WITHDRAWAL TRANSACTION FOR CASH COLLATERAL OF CUSTOMER(PAYMENTS) ////////////////
         $withdrawals = Payment::where('reference', $cashCollateral->id)
@@ -624,10 +683,14 @@ class CashCollateralController extends Controller
     /**
      * DELETE FUNCTION FOR CASH COLLATERAL OF CUSTOMER DEPOSIT
      */
-    public function deleteReceipt($encodedId)
+    public function deleteReceipt(Request $request, $encodedId)
     {
+        $request->validate([
+            'deletion_reason' => 'required|string|min:10|max:500'
+        ]);
+
         try {
-            return DB::transaction(function () use ($encodedId) {
+            return DB::transaction(function () use ($encodedId, $request) {
                 // Decode the encoded receipt ID
                 $decodedId = Hashids::decode($encodedId)[0] ?? null;
 
@@ -654,15 +717,18 @@ class CashCollateralController extends Controller
                 // Delete receipt items
                 $receipt->receiptItems()->delete();
 
+                // Store deletion reason
+                $receipt->deletion_reason = $request->deletion_reason;
+
                 // Subtract the receipt amount from collateral
                 $collateral->decrement('amount', $receipt->amount);
 
-                // Delete the receipt
-                $receipt->delete();
+                // Soft delete the receipt (requires approval)
+                $receipt->delete(); // This will soft delete since we're using SoftDeletes trait
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Receipt deleted successfully.',
+                    'message' => 'Receipt deleted successfully. Awaiting super-admin approval.',
                 ]);
             });
         } catch (\Exception $e) {
@@ -727,6 +793,110 @@ class CashCollateralController extends Controller
         }
     }
 
+    /**
+     * Approve deletion of a deposit (super-admin only)
+     */
+    public function approveDeleteDeposit($id)
+    {
+        if (auth()->user()->role !== 'super-admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super-admin can approve deletions.'
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $receipt = Receipt::withTrashed()->findOrFail($id);
+            
+            if (!$receipt->trashed()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Deposit is not deleted.'
+                ], 400);
+            }
+
+            if ($receipt->deleted_approved) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Deletion already approved.'
+                ], 400);
+            }
+
+            $receipt->deleted_approved = true;
+            $receipt->deleted_approved_by = auth()->id();
+            $receipt->deleted_approved_at = now();
+            $receipt->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Deletion approved successfully!'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Deposit deletion approval error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve deletion: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Restore a soft-deleted deposit (super-admin only)
+     */
+    public function restoreDeposit($id)
+    {
+        if (auth()->user()->role !== 'super-admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super-admin can restore deposits.'
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $receipt = Receipt::withTrashed()->findOrFail($id);
+            
+            if (!$receipt->trashed()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Deposit is not deleted.'
+                ], 400);
+            }
+
+            // Restore the deposit
+            $receipt->restore();
+            $receipt->deleted_approved = false;
+            $receipt->deleted_approved_by = null;
+            $receipt->deleted_approved_at = null;
+            $receipt->save();
+
+            // Restore collateral amount
+            $collateral = CashCollateral::find($receipt->reference);
+            if ($collateral) {
+                $collateral->increment('amount', $receipt->amount);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Deposit restored successfully!'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Deposit restore error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to restore deposit: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
     /**
      * SHOW EDIT FORM FOR DEPOSIT OF CASH COLLATERAL

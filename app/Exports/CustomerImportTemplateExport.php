@@ -55,7 +55,7 @@ class CustomerImportTemplateExport implements FromArray, WithHeadings, WithStyle
                 'Teacher',
                 'ABC School, Dar es Salaam',
                 'National ID',
-                '123456789',
+                '12345678-12345-12345-12',
                 'Spouse',
                 'Sample customer'
             ],
@@ -69,10 +69,25 @@ class CustomerImportTemplateExport implements FromArray, WithHeadings, WithStyle
                 'Kinondoni',
                 'Nurse',
                 'City Hospital',
-                'License',
-                '987654321',
+                'Voter Registration',
+                '12345-123456-123',
                 'Parent',
                 'Another sample'
+            ],
+            [
+                'Peter Johnson',
+                '0734567890',
+                '',
+                '1988-03-10',
+                'M',
+                'Arusha',
+                'Arusha City',
+                'Driver',
+                'Transport Company',
+                'License',
+                '987654321',
+                '',
+                'Sample with License'
             ]
         ];
     }
@@ -236,13 +251,42 @@ class CustomerImportTemplateExport implements FromArray, WithHeadings, WithStyle
                     $districtValidation->setFormula1($formula);
                 }
 
-                // Add instruction note
+                // Set data validation for ID Type column (J)
+                $idTypes = ['National ID', 'License', 'Voter Registration', 'Other'];
+                $idTypeValidation = $sheet->getCell('J2')->getDataValidation();
+                $idTypeValidation->setType(DataValidation::TYPE_LIST);
+                $idTypeValidation->setErrorStyle(DataValidation::STYLE_STOP);
+                $idTypeValidation->setAllowBlank(true);
+                $idTypeValidation->setShowInputMessage(true);
+                $idTypeValidation->setShowErrorMessage(true);
+                $idTypeValidation->setShowDropDown(true);
+                $idTypeValidation->setErrorTitle('Invalid ID Type');
+                $idTypeValidation->setError('Please select a valid ID type from the list');
+                $idTypeValidation->setPromptTitle('Select ID Type');
+                $idTypeValidation->setPrompt('Select ID Type: National ID, License, Voter Registration, or Other');
+                $idTypeValidation->setFormula1('"'.implode(',', $idTypes).'"');
+                
+                // Apply to all data rows
+                for ($row = 2; $row <= $highestRow; $row++) {
+                    $sheet->getCell("J{$row}")->setDataValidation(clone $idTypeValidation);
+                }
+
+                // Add instruction note with ID formatting rules
                 $sheet->mergeCells('A' . ($highestRow + 2) . ':M' . ($highestRow + 2));
                 $instructionCell = $sheet->getCell('A' . ($highestRow + 2));
-                $instructionCell->setValue('INSTRUCTIONS: 1) Sex must be M or F only. 2) Select Region first, then District will auto-filter. 3) Phone numbers starting with 0 will be auto-formatted to 255 prefix. 4) Date format: YYYY-MM-DD. 5) Customer must be at least 18 years old.');
+                $instructions = 'INSTRUCTIONS: 1) Sex must be M or F only. 2) Select Region first, then District will auto-filter. 3) Phone numbers starting with 0 will be auto-formatted to 255 prefix. 4) Date format: YYYY-MM-DD. 5) Customer must be at least 18 years old. 6) ID Type: Select from dropdown. 7) ID Number formatting: National ID = XXXXXXXX-XXXXX-XXXXX-XX (20 digits), License = XXXXXXXXX (9 digits, no dashes), Voter Registration = XXXXX-XXXXXX-XXX (14 digits), Other = free text.';
+                $instructionCell->setValue($instructions);
                 $instructionCell->getStyle()->getFont()->setBold(true)->setItalic(true)->getColor()->setARGB('FF0066CC');
-                $sheet->getRowDimension($highestRow + 2)->setRowHeight(40);
+                $sheet->getRowDimension($highestRow + 2)->setRowHeight(60);
                 $sheet->getStyle('A' . ($highestRow + 2) . ':M' . ($highestRow + 2))->getAlignment()->setWrapText(true);
+
+                // Add ID formatting reference in a separate row
+                $sheet->mergeCells('A' . ($highestRow + 3) . ':M' . ($highestRow + 3));
+                $formatCell = $sheet->getCell('A' . ($highestRow + 3));
+                $formatCell->setValue('ID FORMATTING GUIDE: National ID (XXXXXXXX-XXXXX-XXXXX-XX) | License (XXXXXXXXX) | Voter Registration (XXXXX-XXXXXX-XXX) | Other (any format)');
+                $formatCell->getStyle()->getFont()->setBold(true)->getColor()->setARGB('FF006600');
+                $sheet->getRowDimension($highestRow + 3)->setRowHeight(25);
+                $sheet->getStyle('A' . ($highestRow + 3) . ':M' . ($highestRow + 3))->getAlignment()->setWrapText(true);
             },
         ];
     }

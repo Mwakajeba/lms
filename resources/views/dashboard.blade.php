@@ -277,8 +277,96 @@ use Vinkla\Hashids\Facades\Hashids;
                 </div>
             </div>
             @endcan
+            @if(auth()->user()->role === 'super-admin')
+            <div class="col">
+                <div class="card radius-10 border-danger">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <p class="mb-0">Pending Deletion Requests</p>
+                                <h4 class="font-weight-bold text-danger">{{ $pendingDeletionCount ?? 0 }}</h4>
+                                <p class="text-danger mb-0 font-13">Requires approval</p>
+                            </div>
+                            <div class="widgets-icons bg-gradient-burning text-white"><i class='bx bx-trash'></i></div>
+                        </div>
+                        @if($pendingDeletionCount > 0)
+                            <div class="mt-3">
+                                <a href="#deletion-requests" class="btn btn-sm btn-outline-danger">
+                                    <i class="bx bx-show me-1"></i> View Requests
+                                </a>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+            @endif
         </div>
         <!--end row-->
+
+        @if(auth()->user()->role === 'super-admin' && $pendingDeletionCount > 0)
+        <!-- Deletion Requests Section -->
+        <div class="row" id="deletion-requests">
+            <div class="col-12">
+                <div class="card radius-10">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="bx bx-trash me-2"></i>Pending Deletion Requests</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Customer</th>
+                                        <th>Loan No</th>
+                                        <th>Amount</th>
+                                        <th>Reason</th>
+                                        <th>Deleted By</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($pendingDeletionRequests as $request)
+                                    <tr>
+                                        <td><span class="badge bg-{{ $request['type'] === 'Repayment' ? 'primary' : 'success' }}">{{ $request['type'] }}</span></td>
+                                        <td>{{ $request['customer'] }}</td>
+                                        <td>{{ $request['loan_no'] }}</td>
+                                        <td>TZS {{ number_format($request['amount'], 2) }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info" onclick="showReason('{{ addslashes($request['reason']) }}')">
+                                                <i class="bx bx-info-circle"></i> View
+                                            </button>
+                                        </td>
+                                        <td>{{ $request['deleted_by'] }}</td>
+                                        <td>{{ \Carbon\Carbon::parse($request['deleted_at'])->format('M d, Y H:i') }}</td>
+                                        <td>
+                                            @if($request['type'] === 'Repayment')
+                                                <button class="btn btn-sm btn-success" onclick="approveDeleteRepayment({{ $request['id'] }})">
+                                                    <i class="bx bx-check"></i> Approve
+                                                </button>
+                                                <button class="btn btn-sm btn-primary" onclick="restoreRepayment({{ $request['id'] }})">
+                                                    <i class="bx bx-undo"></i> Restore
+                                                </button>
+                                            @else
+                                                <button class="btn btn-sm btn-success" onclick="approveDeleteDeposit({{ $request['id'] }})">
+                                                    <i class="bx bx-check"></i> Approve
+                                                </button>
+                                                <button class="btn btn-sm btn-primary" onclick="restoreDeposit({{ $request['id'] }})">
+                                                    <i class="bx bx-undo"></i> Restore
+                                                </button>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
 
         @can('view graphs')
         <!-- Loan Product Disbursement Chart -->
@@ -1125,6 +1213,176 @@ use Vinkla\Hashids\Facades\Hashids;
         </div>
 
         @push('scripts')
+        <script>
+            function showReason(reason) {
+                Swal.fire({
+                    title: 'Deletion Reason',
+                    html: `<div class="text-start"><p class="mb-0">${reason}</p></div>`,
+                    icon: 'info',
+                    confirmButtonText: 'Close'
+                });
+            }
+
+            function approveDeleteRepayment(id) {
+                Swal.fire({
+                    title: 'Approve Deletion?',
+                    text: "This will permanently approve the deletion of this repayment.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, approve!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch(`/repayments/${id}/approve-delete`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Content-Type': 'application/json',
+                            },
+                        })
+                        .then(async response => {
+                            const data = await response.json();
+                            if (response.ok && data.success) {
+                                Swal.fire({
+                                    title: 'Approved!',
+                                    text: data.message,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                }).then(() => location.reload());
+                            } else {
+                                Swal.fire('Error', data.message || 'Failed to approve deletion.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('Error', 'Failed to approve deletion.', 'error');
+                        });
+                    }
+                });
+            }
+
+            function restoreRepayment(id) {
+                Swal.fire({
+                    title: 'Restore Repayment?',
+                    text: "This will restore the repayment and reverse the deletion.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#007bff',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, restore!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch(`/repayments/${id}/restore`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Content-Type': 'application/json',
+                            },
+                        })
+                        .then(async response => {
+                            const data = await response.json();
+                            if (response.ok && data.success) {
+                                Swal.fire({
+                                    title: 'Restored!',
+                                    text: data.message,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                }).then(() => location.reload());
+                            } else {
+                                Swal.fire('Error', data.message || 'Failed to restore repayment.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('Error', 'Failed to restore repayment.', 'error');
+                        });
+                    }
+                });
+            }
+
+            function approveDeleteDeposit(id) {
+                Swal.fire({
+                    title: 'Approve Deletion?',
+                    text: "This will permanently approve the deletion of this deposit.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, approve!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch(`/receipts/${id}/approve-delete`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Content-Type': 'application/json',
+                            },
+                        })
+                        .then(async response => {
+                            const data = await response.json();
+                            if (response.ok && data.success) {
+                                Swal.fire({
+                                    title: 'Approved!',
+                                    text: data.message,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                }).then(() => location.reload());
+                            } else {
+                                Swal.fire('Error', data.message || 'Failed to approve deletion.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('Error', 'Failed to approve deletion.', 'error');
+                        });
+                    }
+                });
+            }
+
+            function restoreDeposit(id) {
+                Swal.fire({
+                    title: 'Restore Deposit?',
+                    text: "This will restore the deposit and reverse the deletion.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#007bff',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, restore!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch(`/receipts/${id}/restore`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Content-Type': 'application/json',
+                            },
+                        })
+                        .then(async response => {
+                            const data = await response.json();
+                            if (response.ok && data.success) {
+                                Swal.fire({
+                                    title: 'Restored!',
+                                    text: data.message,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                }).then(() => location.reload());
+                            } else {
+                                Swal.fire('Error', data.message || 'Failed to restore deposit.', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            Swal.fire('Error', 'Failed to restore deposit.', 'error');
+                        });
+                    }
+                });
+            }
+        </script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
         // Character counter for bulk SMS

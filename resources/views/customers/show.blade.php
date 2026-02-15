@@ -2,6 +2,10 @@
 
 @section('title', 'Customer Profile')
 
+@php
+use Vinkla\Hashids\Facades\Hashids;
+@endphp
+
 @section('content')
     <div class="page-wrapper">
         <div class="page-content">
@@ -13,6 +17,10 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0 text-uppercase">Customer Profile</h6>
                 <div class="d-flex gap-2">
+                    <a href="{{ route('loans.create', ['customer_id' => Hashids::encode($customer->id)]) }}" 
+                       class="btn btn-sm btn-success">
+                        <i class="bx bx-plus me-1"></i> Create Loan
+                    </a>
                     <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
                         data-bs-target="#uploadDocumentsModal">
                         <i class="bx bx-upload me-1"></i> Upload Documents
