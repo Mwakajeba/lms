@@ -74,7 +74,8 @@ class LoanController extends Controller
         }
 
         // Fetch required data for the receipt form
-        $bankAccounts = BankAccount::all();
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
         $customers = Customer::all();
         // Get fees with deduction_criteria = 'do_not_include_in_loan_schedule'
         $excludedFees = \DB::table('fees')
@@ -484,6 +485,9 @@ class LoanController extends Controller
     public function getChartAccountsByType($type)
     {
         try {
+            $user = \Illuminate\Support\Facades\Auth::user();
+            $branchId = $user->branch_id ?? null;
+            
             if ($type === 'new') {
                 // For new loans, get bank accounts linked to cash and bank chart accounts (assets)
                 $accounts = BankAccount::whereHas('chartAccount.accountClassGroup', function ($query) {
@@ -494,6 +498,7 @@ class LoanController extends Controller
                         ->orWhere('name', 'LIKE', '%Asset%')
                         ->orWhere('name', 'LIKE', '%asset%');
                 })
+                    ->forBranch($branchId)
                     ->with('chartAccount')
                     ->select('id', 'name', 'account_number')
                     ->orderBy('name')
@@ -521,6 +526,7 @@ class LoanController extends Controller
                         ->orWhere('name', 'LIKE', '%Business Capital%')
                         ->orWhere('name', 'LIKE', '%Capital%');
                 })
+                    ->forBranch($branchId)
                     ->with('chartAccount')
                     ->select('id', 'name', 'account_number')
                     ->orderBy('name')
@@ -1210,7 +1216,8 @@ class LoanController extends Controller
             'semi_annually' => 'Semi Annually',
             'annually' => 'Annually'
         ];
-        $bankAccounts = BankAccount::all();
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
         $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other']; // Example sectors
         return view('loans.create', compact('customers', 'products', 'sectors', 'bankAccounts', 'loanOfficers', 'interestCycles'));
     }
@@ -1557,7 +1564,8 @@ class LoanController extends Controller
             ->select('groups.*')
             ->get();
         $products = LoanProduct::where('is_active', true)->get();
-        $bankAccounts = BankAccount::all();
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
         $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other']; // You can move this to config if reusable
 
         return view('loans.edit', [
@@ -1968,8 +1976,9 @@ class LoanController extends Controller
 
         $filetypes = Filetype::all();
 
-        // Get bank accounts for repayment modal
-        $bankAccounts = BankAccount::all();
+        // Get bank accounts for repayment modal - filtered by branch
+        $user = Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
@@ -2138,7 +2147,7 @@ class LoanController extends Controller
             ->get();
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::where('is_active', true)->get();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forBranch($branchId)->get();
         $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other'];
 
         return view('loans.application.create', compact('customers', 'groups', 'products', 'sectors', 'bankAccounts'));
@@ -2327,7 +2336,8 @@ class LoanController extends Controller
 
         $filetypes = Filetype::all();
 
-        $bankAccounts = BankAccount::all();
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
         // Set the encoded ID for the loan object
         $loan->encodedId = $encodedId;
@@ -2356,7 +2366,7 @@ class LoanController extends Controller
             ->get();
         $groups = Group::where('branch_id', $branchId)->get();
         $products = LoanProduct::all();
-        $bankAccounts = BankAccount::all();
+        $bankAccounts = BankAccount::forBranch($branchId)->get();
         $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other'];
 
         return view('loans.application.edit', compact('loanApplication', 'customers', 'groups', 'products', 'sectors', 'bankAccounts'));

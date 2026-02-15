@@ -367,7 +367,8 @@ class CashCollateralController extends Controller
 
         $collateral = CashCollateral::with('customer')->findOrFail($id);
         $customer = $collateral->customer;
-        $bankAccounts = BankAccount::all();
+        $user = Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
         return view('cash_collaterals.deposit', compact('bankAccounts', 'customer', 'collateral'));
     }
@@ -508,7 +509,8 @@ class CashCollateralController extends Controller
         }
         $collateral = CashCollateral::with('customer')->findOrFail($id);
         $customer = $collateral->customer;
-        $bankAccounts = BankAccount::all();
+        $user = Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
         return view('cash_collaterals.withdraw', compact('bankAccounts', 'customer', 'collateral'));
     }
@@ -752,7 +754,8 @@ class CashCollateralController extends Controller
             // Check authorization
             $this->authorizeUserAccess($collateral);
 
-            $bankAccounts = BankAccount::all();
+            $user = Auth::user();
+            $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
             return view('cash_collaterals.edit_receipt', compact('receipt', 'collateral', 'bankAccounts'));
         } catch (\Throwable $e) {
@@ -879,7 +882,8 @@ class CashCollateralController extends Controller
             // Check authorization
             $this->authorizeUserAccess($collateral);
 
-            $bankAccounts = BankAccount::all();
+            $user = Auth::user();
+            $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
 
             return view('cash_collaterals.edit_payment', compact('payment', 'collateral', 'bankAccounts'));
         } catch (\Throwable $e) {

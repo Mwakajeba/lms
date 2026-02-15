@@ -83,4 +83,22 @@ class BankAccount extends Model
         return $this->belongsToMany(Branch::class, 'bank_branch', 'bank_account_id', 'branch_id')
             ->withTimestamps();
     }
+
+    /**
+     * Scope a query to only include bank accounts assigned to a specific branch.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param int|null $branchId
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeForBranch($query, $branchId = null)
+    {
+        if ($branchId) {
+            return $query->whereHas('branches', function ($q) use ($branchId) {
+                $q->where('branches.id', $branchId);
+            });
+        }
+        
+        return $query;
+    }
 }

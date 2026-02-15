@@ -172,7 +172,9 @@ class ReceiptVoucherController extends Controller
         $user = Auth::user();
 
         // Get bank accounts for the current company
+        $user = Auth::user();
         $bankAccounts = BankAccount::with('chartAccount')
+            ->forBranch($user->branch_id)
             ->whereHas('chartAccount.accountClassGroup', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             })
@@ -421,7 +423,9 @@ class ReceiptVoucherController extends Controller
         $user = Auth::user();
 
         // Get bank accounts for the current company
+        $user = Auth::user();
         $bankAccounts = BankAccount::with('chartAccount')
+            ->forBranch($user->branch_id)
             ->whereHas('chartAccount.accountClassGroup', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             })
@@ -757,7 +761,9 @@ class ReceiptVoucherController extends Controller
         $user = Auth::user();
 
         // Get bank accounts for the current company
+        $user = Auth::user();
         $bankAccounts = BankAccount::with('chartAccount')
+            ->forBranch($user->branch_id)
             ->whereHas('chartAccount.accountClassGroup', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             })
