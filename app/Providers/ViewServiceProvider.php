@@ -50,6 +50,24 @@ class ViewServiceProvider extends ServiceProvider
 
             $view->with('arrearsLoans', $arrearsLoans);
             $view->with('arrearsLoansCount', $arrearsLoans->count());
+
+            // Add deletion requests count for super-admin
+            if ($user && $user->role === 'super-admin') {
+                $pendingDeletionCount = \App\Models\Repayment::withTrashed()
+                    ->whereNotNull('deleted_at')
+                    ->where('deleted_approved', false)
+                    ->count();
+                
+                $pendingDeletionCount += \App\Models\Receipt::withTrashed()
+                    ->whereNotNull('deleted_at')
+                    ->where('deleted_approved', false)
+                    ->where('reference_type', 'Deposit')
+                    ->count();
+
+                $view->with('pendingDeletionCount', $pendingDeletionCount);
+            } else {
+                $view->with('pendingDeletionCount', 0);
+            }
         });
 
         View::composer('incs.sideMenu', function ($view) {

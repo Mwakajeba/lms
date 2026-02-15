@@ -242,15 +242,33 @@
 
     function deleteTransaction(encodedId, type, transactionTypeName) {
         Swal.fire({
-            title: 'Are you sure?',
-            text: `This ${transactionTypeName} will be permanently deleted.`,
+            title: 'Delete ' + type + '?',
+            html: `
+                <p class="mb-3">This will mark the ${transactionTypeName} as deleted. Deletion requires super-admin approval.</p>
+                <div class="form-group text-start">
+                    <label for="deletion_reason" class="form-label">Reason for Deletion <span class="text-danger">*</span></label>
+                    <textarea id="deletion_reason" class="form-control" rows="3" placeholder="Please provide a reason for deleting this ${transactionTypeName}..." required></textarea>
+                </div>
+            `,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Yes, delete it!',
             cancelButtonText: 'Cancel',
             reverseButtons: true,
+            preConfirm: () => {
+                const reason = document.getElementById('deletion_reason').value.trim();
+                if (!reason) {
+                    Swal.showValidationMessage('Please provide a reason for deletion');
+                    return false;
+                }
+                if (reason.length < 10) {
+                    Swal.showValidationMessage('Reason must be at least 10 characters');
+                    return false;
+                }
+                return reason;
+            }
         }).then((result) => {
-            if (result.isConfirmed) {
+            if (result.isConfirmed && result.value) {
                 const url = type === 'Deposit' ?
                     `/receipts/${encodedId}` :
                     `/payments/${encodedId}`;
@@ -261,30 +279,22 @@
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             'Content-Type': 'application/json',
                         },
+                        body: JSON.stringify({
+                            deletion_reason: result.value
+                        })
                     })
                     .then(async response => {
-                        if (response.ok) {
+                        const data = await response.json();
+                        if (response.ok && data.success) {
                             Swal.fire({
                                 title: 'Deleted!',
-                                text: 'Transaction deleted successfully.',
+                                text: data.message || 'Transaction deleted successfully. Awaiting super-admin approval.',
                                 icon: 'success',
                                 timer: 2000,
                                 showConfirmButton: false,
                             }).then(() => location.reload());
                         } else {
-                            const text = await response.text(); // get raw response
-                            console.error('Raw response:', text);
-
-                            let message = 'Failed to delete transaction.';
-                            try {
-                                const data = JSON.parse(text);
-                                message = data.message || message;
-                            } catch (e) {
-                                // fallback to raw HTML snippet in case of unexpected error
-                                message = text.slice(0, 200); // avoid flooding
-                            }
-
-                            Swal.fire('Error', message, 'error');
+                            Swal.fire('Error', data.message || 'Failed to delete transaction.', 'error');
                         }
                     })
                     .catch(error => {
@@ -295,6 +305,95 @@
             }
         });
     }
+
+    function approveDeleteDeposit(id) {
+        Swal.fire({
+            title: 'Approve Deletion?',
+            text: "This will permanently approve the deletion of this deposit.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, approve!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/receipts/${id}/approve-delete`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(async response => {
+                    const data = await response.json();
+                    if (response.ok && data.success) {
+                        Swal.fire({
+                            title: 'Approved!',
+                            text: data.message,
+                            icon: 'success',
+                            timer: 2000,
+                            showConfirmButton: false,
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message || 'Failed to approve deletion.', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Error', 'Failed to approve deletion.', 'error');
+                });
+            }
+        });
+    }
+
+    function restoreDeposit(id) {
+        Swal.fire({
+            title: 'Restore Deposit?',
+            text: "This will restore the deposit and reverse the deletion.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#007bff',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, restore!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/receipts/${id}/restore`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(async response => {
+                    const data = await response.json();
+                    if (response.ok && data.success) {
+                        Swal.fire({
+                            title: 'Restored!',
+                            text: data.message,
+                            icon: 'success',
+                            timer: 2000,
+                            showConfirmButton: false,
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message || 'Failed to restore deposit.', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Error', 'Failed to restore deposit.', 'error');
+                });
+            }
+            });
+        }
+
+        function showDeletionReason(reason) {
+            Swal.fire({
+                title: 'Deletion Reason',
+                html: `<div class="text-start"><p class="mb-0">${reason}</p></div>`,
+                icon: 'info',
+                confirmButtonText: 'Close'
+            });
+        }
 </script>
 <script>
     $(document).ready(function() {

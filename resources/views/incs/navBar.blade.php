@@ -141,8 +141,9 @@
                     @endphp
                     <li class="nav-item dropdown dropdown-large">
                         <a class="nav-link dropdown-toggle dropdown-toggle-nocaret position-relative" href="#"
-                            role="button" data-bs-toggle="dropdown" aria-expanded="false"> <span class="alert-count"
-                                id="navbarNotificationCount">{{$dueSchedules->count()}}</span>
+                            role="button" data-bs-toggle="dropdown" aria-expanded="false"> 
+                            <span class="alert-count"
+                                id="navbarNotificationCount">{{$dueSchedules->count() + ($pendingDeletionCount ?? 0)}}</span>
                             <i class='bx bx-bell'></i>
                         </a>
                         <div class="dropdown-menu dropdown-menu-end">
@@ -172,6 +173,17 @@
                                             <div class="user-online"><i class="bx bx-user"></i></div>
                                             <div class="flex-grow-1">
                                                 <h6 class="msg-name">No due payments today</h6>
+                                            </div>
+                                        </div>
+                                    </a>
+                                @endif
+                                @if(auth()->user()->role === 'super-admin' && ($pendingDeletionCount ?? 0) > 0)
+                                    <a class="dropdown-item" href="{{ route('dashboard') }}#deletion-requests">
+                                        <div class="d-flex align-items-center">
+                                            <div class="user-online"><i class="bx bx-trash text-danger"></i></div>
+                                            <div class="flex-grow-1">
+                                                <h6 class="msg-name text-danger">Deletion Requests <span class="msg-time float-end">{{ $pendingDeletionCount }} pending</span></h6>
+                                                <p class="msg-info">Action required: {{ $pendingDeletionCount }} deletion{{ $pendingDeletionCount > 1 ? 's' : '' }} awaiting approval</p>
                                             </div>
                                         </div>
                                     </a>

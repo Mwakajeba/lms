@@ -29,12 +29,17 @@ $isEdit = isset($loan);
                 <select name="customer_id" id="customer_id" class="form-select select2-single @error('customer_id') is-invalid @enderror" required>
                     <option value="">Select Customer</option>
                     @foreach($customers as $customer)
-                    <option value="{{ $customer->id }}" {{ old('customer_id', $loan->customer_id ?? '') == $customer->id ? 'selected' : '' }}>
+                    <option value="{{ $customer->id }}" {{ old('customer_id', $loan->customer_id ?? ($selectedCustomerId ?? '')) == $customer->id ? 'selected' : '' }}>
                         {{ $customer->name }} - {{ $customer->phone1 }}
                     </option>
                     @endforeach
                 </select>
                 @error('customer_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                @if(isset($selectedCustomerId) && $selectedCustomerId)
+                    <small class="form-text text-muted">
+                        <i class="bx bx-info-circle"></i> Customer pre-selected from customer profile
+                    </small>
+                @endif
             </div>
 
             <!-- Displayed Group (disabled text input) -->
@@ -442,8 +447,13 @@ $isEdit = isset($loan);
         @if($isEdit && isset($loan) && isset($loan->group))
             groupIdInput.value = '{{ $loan->group_id }}';
             groupNameDisplay.value = '{{ $loan->group->name }}';
-        @else
-            // Otherwise, use customer selection logic
+        @elseif(isset($selectedCustomerId) && $selectedCustomerId)
+            // Pre-select customer and update group if coming from customer page
+            const preselectedCustomer = customers.find(c => c.id == {{ $selectedCustomerId }});
+            if (preselectedCustomer) {
+                updateGroupForCustomer({{ $selectedCustomerId }});
+            }
+            // Also set up change handler
             if (window.jQuery) {
                 $('#customer_id').on('change', function() {
                     updateGroupForCustomer(this.value);

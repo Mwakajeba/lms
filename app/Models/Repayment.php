@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use App\Traits\LogsActivity;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Repayment extends Model
 {
-    use HasFactory, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
     protected $table = 'repayments';
     protected $fillable = [
         'customer_id',
@@ -22,6 +24,10 @@ class Repayment extends Model
         'due_date',
         'cash_deposit',
         'payment_date',
+        'deleted_approved',
+        'deleted_approved_by',
+        'deleted_approved_at',
+        'deletion_reason',
     ];
 
     protected $casts = [
@@ -32,6 +38,8 @@ class Repayment extends Model
         'penalt_amount' => 'float',
         'fee_amount' => 'float',
         'cash_deposit' => 'float',
+        'deleted_approved' => 'boolean',
+        'deleted_approved_at' => 'datetime',
     ];
 
 
@@ -58,6 +66,11 @@ class Repayment extends Model
     public function receipt()
     {
         return $this->hasOne(Receipt::class, 'reference_number', 'id');
+    }
+
+    public function deletedApprovedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_approved_by');
     }
 
     /***********

@@ -252,8 +252,9 @@ class LoanRepaymentController extends Controller
         // 4. Update loan status if it was closed due to this repayment
         $this->updateLoanStatusAfterDeletion($loan, $originalLoanStatus);
 
-        // 5. Delete the repayment record
-        $repayment->delete();
+        // 5. Save deletion reason and soft delete the repayment record (requires approval)
+        $repayment->save(); // Save deletion reason if it was set
+        $repayment->delete(); // This will soft delete since we're using SoftDeletes trait
 
         Log::info('Repayment deletion completed successfully', [
             'repayment_id' => $repayment->id,
@@ -412,12 +413,19 @@ class LoanRepaymentController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $request->validate([
+            'deletion_reason' => 'required|string|min:10|max:500'
+        ]);
+
         DB::beginTransaction();
 
         try {
             $repayment = Repayment::with(['loan', 'receipt'])->findOrFail($id);
+
+            // Store deletion reason before soft deleting
+            $repayment->deletion_reason = $request->deletion_reason;
 
             // Delete repayment and associated records
             $this->deleteRepaymentInternal($repayment);
@@ -426,7 +434,7 @@ class LoanRepaymentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Repayment deleted successfully!'
+                'message' => 'Repayment deleted successfully! Awaiting super-admin approval.'
             ]);
 
         } catch (\Exception $e) {
@@ -436,6 +444,108 @@ class LoanRepaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete repayment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Approve deletion of a repayment (super-admin only)
+     */
+    public function approveDelete($id)
+    {
+        if (auth()->user()->role !== 'super-admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super-admin can approve deletions.'
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $repayment = Repayment::withTrashed()->findOrFail($id);
+            
+            if (!$repayment->trashed()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Repayment is not deleted.'
+                ], 400);
+            }
+
+            if ($repayment->deleted_approved) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Deletion already approved.'
+                ], 400);
+            }
+
+            $repayment->deleted_approved = true;
+            $repayment->deleted_approved_by = auth()->id();
+            $repayment->deleted_approved_at = now();
+            $repayment->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Deletion approved successfully!'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Repayment deletion approval error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve deletion: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Restore a soft-deleted repayment (super-admin only)
+     */
+    public function restore($id)
+    {
+        if (auth()->user()->role !== 'super-admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super-admin can restore repayments.'
+            ], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $repayment = Repayment::withTrashed()->findOrFail($id);
+            
+            if (!$repayment->trashed()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Repayment is not deleted.'
+                ], 400);
+            }
+
+            // Restore the repayment
+            $repayment->restore();
+            $repayment->deleted_approved = false;
+            $repayment->deleted_approved_by = null;
+            $repayment->deleted_approved_at = null;
+            $repayment->save();
+
+            // TODO: Restore associated GL transactions, receipts, etc.
+            // This would require reversing the deletion logic
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Repayment restored successfully!'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Repayment restore error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to restore repayment: ' . $e->getMessage()
             ], 500);
         }
     }

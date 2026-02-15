@@ -924,37 +924,107 @@
                                         </thead>
                                         <tbody>
                                             @foreach($loan->repayments->sortByDesc('payment_date') as $index => $repayment)
-                                                <tr>
-                                                    <td class="text-center"><input type="checkbox" class="repayment-select"
-                                                            value="{{ $repayment->id }}"></td>
-                                                    <th scope="row" class="ps-4">{{ $index + 1 }}</th>
-                                                    <td>{{ \Carbon\Carbon::parse($repayment->payment_date)->format('M d, Y') }}</td>
-                                                    <td>{{ \Carbon\Carbon::parse($repayment->due_date)->format('M d, Y') }}</td>
-                                                    <td class="text-success">{{ number_format($repayment->principal, 2) }}</td>
-                                                    <td class="text-info">{{ number_format($repayment->interest, 2) }}</td>
-                                                    <td class="text-danger">{{ number_format($repayment->penalt_amount, 2) }}</td>
-                                                    <td class="text-warning">{{ number_format($repayment->fee_amount, 2) }}</td>
-                                                    <td class="text-end pe-4 fw-bold">
-                                                        {{ number_format($repayment->amount_paid, 2) }}
-                                                    </td>
-                                                    <td>{{ $repayment->chartAccount->account_name ?? 'N/A' }}</td>
+                                                <tr class="{{ $repayment->trashed() ? 'text-danger' : '' }}" style="{{ $repayment->trashed() ? 'background-color: #ffe6e6;' : '' }}">
                                                     <td class="text-center">
-                                                        <div class="btn-group" role="group">
-                                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                                onclick="printReceipt({{ $repayment->id }})" title="Print Receipt">
-                                                                Print
-                                                            </button>
-                                                            <!-- <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                                                                                                                                                                                                                                                                                                                                                        onclick="editRepayment({{ $repayment->id }})"
-                                                                                                                                                                                                                                                                                                                                                                                        title="Edit Repayment">
-                                                                                                                                                                                                                                                                                                                                                                                        Edit
-                                                                                                                                                                                                                                                                                                                                                                                    </button> -->
-                                                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                                                onclick="deleteRepayment({{ $repayment->id }})"
-                                                                title="Delete Repayment">
-                                                                Delete
-                                                            </button>
-                                                        </div>
+                                                        @if(!$repayment->trashed())
+                                                            <input type="checkbox" class="repayment-select"
+                                                                value="{{ $repayment->id }}">
+                                                        @endif
+                                                    </td>
+                                                    <th scope="row" class="ps-4">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ $index + 1 }}</del>
+                                                        @else
+                                                            {{ $index + 1 }}
+                                                        @endif
+                                                    </th>
+                                                    <td>
+                                                        @if($repayment->trashed())
+                                                            <del>{{ \Carbon\Carbon::parse($repayment->payment_date)->format('M d, Y') }}</del>
+                                                        @else
+                                                            {{ \Carbon\Carbon::parse($repayment->payment_date)->format('M d, Y') }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($repayment->trashed())
+                                                            <del>{{ \Carbon\Carbon::parse($repayment->due_date)->format('M d, Y') }}</del>
+                                                        @else
+                                                            {{ \Carbon\Carbon::parse($repayment->due_date)->format('M d, Y') }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-success">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ number_format($repayment->principal, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($repayment->principal, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-info">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ number_format($repayment->interest, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($repayment->interest, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-danger">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ number_format($repayment->penalt_amount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($repayment->penalt_amount, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-warning">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ number_format($repayment->fee_amount, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($repayment->fee_amount, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end pe-4 fw-bold">
+                                                        @if($repayment->trashed())
+                                                            <del>{{ number_format($repayment->amount_paid, 2) }}</del>
+                                                        @else
+                                                            {{ number_format($repayment->amount_paid, 2) }}
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        @if($repayment->trashed())
+                                                            <del>{{ $repayment->chartAccount->account_name ?? 'N/A' }}</del>
+                                                        @else
+                                                            {{ $repayment->chartAccount->account_name ?? 'N/A' }}
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if($repayment->trashed())
+                                                            @if(!$repayment->deleted_approved && auth()->user()->role === 'super-admin')
+                                                                <button type="button" class="btn btn-sm btn-outline-success"
+                                                                    onclick="approveDeleteRepayment({{ $repayment->id }})"
+                                                                    title="Approve Deletion">
+                                                                    Approve Delete
+                                                                </button>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                    onclick="restoreRepayment({{ $repayment->id }})"
+                                                                    title="Restore Repayment">
+                                                                    Restore
+                                                                </button>
+                                                            @elseif($repayment->deleted_approved)
+                                                                <span class="badge bg-success">Deletion Approved</span>
+                                                            @else
+                                                                <span class="badge bg-warning">Pending Approval</span>
+                                                            @endif
+                                                        @else
+                                                            <div class="btn-group" role="group">
+                                                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                    onclick="printReceipt({{ $repayment->id }})" title="Print Receipt">
+                                                                    Print
+                                                                </button>
+                                                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                                                    onclick="deleteRepayment({{ $repayment->id }})"
+                                                                    title="Delete Repayment">
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        @endif
                                                     </td>
                                                 </tr>
                                             @endforeach
@@ -2844,20 +2914,38 @@
         function deleteRepayment(repaymentId) {
             Swal.fire({
                 title: 'Delete Repayment?',
-                text: "This will also delete associated receipts and GL transactions. This action cannot be undone!",
+                html: `
+                    <p class="mb-3">This will mark the repayment as deleted. Deletion requires super-admin approval.</p>
+                    <div class="form-group text-start">
+                        <label for="deletion_reason" class="form-label">Reason for Deletion <span class="text-danger">*</span></label>
+                        <textarea id="deletion_reason" class="form-control" rows="3" placeholder="Please provide a reason for deleting this repayment..." required></textarea>
+                    </div>
+                `,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Yes, delete it!'
+                confirmButtonText: 'Yes, delete it!',
+                preConfirm: () => {
+                    const reason = document.getElementById('deletion_reason').value.trim();
+                    if (!reason) {
+                        Swal.showValidationMessage('Please provide a reason for deletion');
+                        return false;
+                    }
+                    return reason;
+                }
             }).then((result) => {
-                if (result.isConfirmed) {
+                if (result.isConfirmed && result.value) {
                     $.ajax({
                         url: `/repayments/${repaymentId}`,
                         method: 'DELETE',
                         headers: {
-                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                            'Content-Type': 'application/json'
                         },
+                        data: JSON.stringify({
+                            deletion_reason: result.value
+                        }),
                         success: function (response) {
                             if (response.success) {
                                 showToast('Success!', response.message, 'success');
@@ -2877,6 +2965,93 @@
                         }
                     });
                 }
+            });
+        }
+
+        function approveDeleteRepayment(repaymentId) {
+            Swal.fire({
+                title: 'Approve Deletion?',
+                text: "This will permanently approve the deletion of this repayment.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, approve!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: `/repayments/${repaymentId}/approve-delete`,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                showToast('Success!', response.message, 'success');
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                showToast('Error!', response.message, 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            let errorMessage = 'Failed to approve deletion.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            showToast('Error!', errorMessage, 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        function restoreRepayment(repaymentId) {
+            Swal.fire({
+                title: 'Restore Repayment?',
+                text: "This will restore the repayment and reverse the deletion.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#007bff',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, restore!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: `/repayments/${repaymentId}/restore`,
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                showToast('Success!', response.message, 'success');
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                showToast('Error!', response.message, 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            let errorMessage = 'Failed to restore repayment.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            showToast('Error!', errorMessage, 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        function showDeletionReason(reason) {
+            Swal.fire({
+                title: 'Deletion Reason',
+                html: `<div class="text-start"><p class="mb-0">${reason}</p></div>`,
+                icon: 'info',
+                confirmButtonText: 'Close'
             });
         }
 

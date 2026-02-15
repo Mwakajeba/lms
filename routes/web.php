@@ -795,6 +795,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('customers/bulk-upload', [CustomerController::class, 'bulkUploadStore'])->name('customers.bulk-upload.store');
     Route::get('customers/download-sample', [CustomerController::class, 'downloadSample'])->name('customers.download-sample');
     Route::get('customers/download-excel-template', [CustomerController::class, 'downloadExcelTemplate'])->name('customers.download-excel-template');
+    Route::get('customers/export-failed-records', [CustomerController::class, 'exportFailedRecords'])->name('customers.export-failed-records');
 
     // Documents upload/delete
     Route::post('customers/{encodedCustomerId}/documents', [CustomerController::class, 'uploadDocuments'])->name('customers.documents.upload');
@@ -977,6 +978,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/repayments/{id}/edit', [LoanRepaymentController::class, 'edit'])->name('repayments.edit');
     Route::put('/repayments/{id}', [LoanRepaymentController::class, 'update'])->name('repayments.update');
     Route::delete('/repayments/{id}', [LoanRepaymentController::class, 'destroy'])->name('repayments.destroy');
+    Route::post('/repayments/{id}/approve-delete', [LoanRepaymentController::class, 'approveDelete'])->name('repayments.approve-delete');
+    Route::post('/repayments/{id}/restore', [LoanRepaymentController::class, 'restore'])->name('repayments.restore');
     Route::get('/repayments/{id}/print', [LoanRepaymentController::class, 'printReceipt'])->name('repayments.print');
 
 
@@ -1011,6 +1014,8 @@ Route::middleware(['auth'])->prefix('cash_collaterals')->group(function () {
     Route::get('/receipts/{receipt}/edit', [CashCollateralController::class, 'editReceipt'])->name('receipts.edit');
     Route::put('/receipts/{receipt}', [CashCollateralController::class, 'updateReceipt'])->name('receipts.update');
     Route::delete('/receipts/{receipt}', [CashCollateralController::class, 'deleteReceipt'])->name('receipts.destroy');
+    Route::post('/receipts/{id}/approve-delete', [CashCollateralController::class, 'approveDeleteDeposit'])->name('receipts.approve-delete');
+    Route::post('/receipts/{id}/restore', [CashCollateralController::class, 'restoreDeposit'])->name('receipts.restore');
 
     Route::get('/payments/{payment}/edit', [CashCollateralController::class, 'editPayment'])->name('payments.edit');
     Route::put('/payments/{payment}', [CashCollateralController::class, 'updatePayment'])->name('payments.update');

@@ -1196,7 +1196,7 @@ class LoanController extends Controller
         return view('loans.list', compact('loans', 'pageTitle', 'status', 'branches', 'loanProducts'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $branchId = auth()->user()->branch_id;
         $customers = Customer::with('groups')
@@ -1219,7 +1219,27 @@ class LoanController extends Controller
         $user = \Illuminate\Support\Facades\Auth::user();
         $bankAccounts = BankAccount::forBranch($user->branch_id)->get();
         $sectors = ['Agriculture', 'Business', 'Education', 'Health', 'Other']; // Example sectors
-        return view('loans.create', compact('customers', 'products', 'sectors', 'bankAccounts', 'loanOfficers', 'interestCycles'));
+        
+        // Get pre-selected customer ID if provided
+        $selectedCustomerId = null;
+        if ($request->has('customer_id')) {
+            $decoded = \Vinkla\Hashids\Facades\Hashids::decode($request->customer_id);
+            if (!empty($decoded)) {
+                $selectedCustomerId = $decoded[0];
+                // Verify customer exists and belongs to the branch
+                $customer = Customer::where('id', $selectedCustomerId)
+                    ->where('branch_id', $branchId)
+                    ->where('category', 'Borrower')
+                    ->first();
+                if ($customer) {
+                    $selectedCustomerId = $customer->id;
+                } else {
+                    $selectedCustomerId = null;
+                }
+            }
+        }
+        
+        return view('loans.create', compact('customers', 'products', 'sectors', 'bankAccounts', 'loanOfficers', 'interestCycles', 'selectedCustomerId'));
     }
 
     public function store(Request $request)

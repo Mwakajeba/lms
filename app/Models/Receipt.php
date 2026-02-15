@@ -5,10 +5,11 @@ namespace App\Models;
 use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Receipt extends Model
 {
-    use HasFactory, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'reference',
@@ -29,6 +30,10 @@ class Receipt extends Model
         'approved',
         'approved_by',
         'approved_at',
+        'deleted_approved',
+        'deleted_approved_by',
+        'deleted_approved_at',
+        'deletion_reason',
     ];
 
     protected $casts = [
@@ -38,6 +43,8 @@ class Receipt extends Model
         'approved_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'deleted_approved' => 'boolean',
+        'deleted_approved_at' => 'datetime',
     ];
 
     // Relationships
@@ -49,6 +56,11 @@ class Receipt extends Model
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function deletedApprovedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_approved_by');
     }
 
     public function bankAccount()
