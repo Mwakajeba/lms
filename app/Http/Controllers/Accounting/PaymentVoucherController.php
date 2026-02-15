@@ -194,11 +194,12 @@ class PaymentVoucherController extends Controller
     {
         $user = Auth::user();
 
-        // Get bank accounts for the current company
+        // Get bank accounts for the current company and branch
         $bankAccounts = BankAccount::with('chartAccount')
             ->whereHas('chartAccount.accountClassGroup', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             })
+            ->forBranch($user->branch_id)
             ->orderBy('name')
             ->get();
 
@@ -414,11 +415,12 @@ class PaymentVoucherController extends Controller
                 ->withErrors(['error' => 'Cannot edit an approved payment voucher.']);
         }
 
-        // Get bank accounts for the current company
+        // Get bank accounts for the current company and branch
         $bankAccounts = BankAccount::with('chartAccount')
             ->whereHas('chartAccount.accountClassGroup', function ($query) use ($user) {
                 $query->where('company_id', $user->company_id);
             })
+            ->forBranch($user->branch_id)
             ->orderBy('name')
             ->get();
 

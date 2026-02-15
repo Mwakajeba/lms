@@ -353,7 +353,8 @@ class BillPurchaseController extends Controller
     {
         $billPurchase->load(['supplier', 'creditAccount']);
 
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        $user = Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->orderBy('name')->get();
         $chartAccounts = ChartAccount::orderBy('account_name')->get();
 
         return view('accounting.bill-purchases.payment', compact('billPurchase', 'bankAccounts', 'chartAccounts'));
@@ -468,7 +469,8 @@ class BillPurchaseController extends Controller
     {
         $payment->load(['bankAccount', 'supplier']);
 
-        $bankAccounts = BankAccount::orderBy('name')->get();
+        $user = Auth::user();
+        $bankAccounts = BankAccount::forBranch($user->branch_id)->orderBy('name')->get();
         $suppliers = \App\Models\Supplier::where('status', 'active')->orderBy('name')->get();
 
         return view('accounting.bill-purchases.payment-edit', compact('payment', 'bankAccounts', 'suppliers'));
