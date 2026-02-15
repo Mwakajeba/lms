@@ -41,6 +41,24 @@
                 @enderror
             </div>
         </div>
+
+        <div class="col-md-12">
+            <div class="mb-3">
+                <label for="branches" class="form-label">Assigned Branches</label>
+                <select class="form-select select2-multiple @error('branches') is-invalid @enderror" name="branches[]" id="branches" multiple>
+                    @foreach($branches ?? [] as $branch)
+                        <option value="{{ $branch->id }}" 
+                            {{ (old('branches') && in_array($branch->id, old('branches'))) || (isset($bankAccount) && isset($bankAccount->branches) && $bankAccount->branches->contains($branch->id)) ? 'selected' : '' }}>
+                            {{ $branch->name }} {{ $branch->branch_name ? '(' . $branch->branch_name . ')' : '' }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('branches')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <small class="form-text text-muted">Select one or more branches to assign to this bank account.</small>
+            </div>
+        </div>
     </div>
 
     <div class="d-flex justify-content-end gap-2">
