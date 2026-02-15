@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\BankAccount;
+use App\Models\Branch;
 use App\Models\ChartAccount;
 use App\Models\GlTransaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Vinkla\Hashids\Facades\Hashids;
 
@@ -60,13 +62,21 @@ class BankAccountController extends Controller
      */
     public function create()
     {
+        $user = Auth::user();
+        
         $chartAccounts = ChartAccount::with('accountClassGroup.accountClass')
             ->whereHas('accountClassGroup.accountClass', function ($q) {
                 $q->whereIn('name', ['Assets', 'Equity']);
             })
             ->get();
 
-        return view('bank-accounts.create', compact('chartAccounts'));
+        // Get branches for the current company
+        $branches = Branch::where('company_id', $user->company_id)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+
+        return view('bank-accounts.create', compact('chartAccounts', 'branches'));
     }
 
     /**
@@ -78,9 +88,16 @@ class BankAccountController extends Controller
             'chart_account_id' => 'required|exists:chart_accounts,id',
             'name' => 'required|string|max:255',
             'account_number' => 'required|string|max:255|unique:bank_accounts,account_number',
+            'branches' => 'nullable|array',
+            'branches.*' => 'exists:branches,id',
         ]);
 
-        BankAccount::create($request->all());
+        $bankAccount = BankAccount::create($request->only(['chart_account_id', 'name', 'account_number']));
+
+        // Sync branches if provided
+        if ($request->has('branches')) {
+            $bankAccount->branches()->sync($request->branches);
+        }
 
         return redirect()->route('accounting.bank-accounts')
             ->with('success', 'Bank account created successfully!');
@@ -114,12 +131,19 @@ class BankAccountController extends Controller
             return redirect()->route('accounting.bank-accounts')->withErrors(['Bank account not found.']);
         }
 
-        $bankAccount = BankAccount::findOrFail($decoded[0]);
+        $user = Auth::user();
+        $bankAccount = BankAccount::with('branches')->findOrFail($decoded[0]);
         $chartAccounts = ChartAccount::with('accountClassGroup.accountClass')
             ->orderBy('account_name')
             ->get();
 
-        return view('bank-accounts.edit', compact('bankAccount', 'chartAccounts'));
+        // Get branches for the current company
+        $branches = Branch::where('company_id', $user->company_id)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+
+        return view('bank-accounts.edit', compact('bankAccount', 'chartAccounts', 'branches'));
     }
 
     /**
@@ -139,9 +163,14 @@ class BankAccountController extends Controller
             'chart_account_id' => 'required|exists:chart_accounts,id',
             'name' => 'required|string|max:255',
             'account_number' => 'required|string|max:255|unique:bank_accounts,account_number,' . $bankAccount->id,
+            'branches' => 'nullable|array',
+            'branches.*' => 'exists:branches,id',
         ]);
 
-        $bankAccount->update($request->all());
+        $bankAccount->update($request->only(['chart_account_id', 'name', 'account_number']));
+
+        // Sync branches - if no branches provided, sync empty array to remove all
+        $bankAccount->branches()->sync($request->branches ?? []);
 
         return redirect()->route('accounting.bank-accounts')
             ->with('success', 'Bank account updated successfully!');

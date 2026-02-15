@@ -3,8 +3,9 @@
 namespace App\Models;
 
 use App\Traits\LogsActivity;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Vinkla\Hashids\Facades\Hashids;
 
 class Branch extends Model
@@ -34,6 +35,15 @@ class Branch extends Model
     public function loans()
     {
         return $this->hasMany(Loan::class, 'branch_id');
+    }
+
+    /**
+     * Get the bank accounts assigned to this branch.
+     */
+    public function bankAccounts(): BelongsToMany
+    {
+        return $this->belongsToMany(BankAccount::class, 'bank_branch', 'branch_id', 'bank_account_id')
+            ->withTimestamps();
     }
 
     /**

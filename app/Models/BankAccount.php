@@ -6,6 +6,7 @@ use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BankAccount extends Model
@@ -72,5 +73,14 @@ class BankAccount extends Model
     public function loans()
     {
         return $this->hasMany(Loan::class);
+    }
+
+    /**
+     * Get the branches assigned to this bank account.
+     */
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(Branch::class, 'bank_branch', 'bank_account_id', 'branch_id')
+            ->withTimestamps();
     }
 }
