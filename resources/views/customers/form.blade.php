@@ -25,7 +25,7 @@ $isEdit = isset($customer);
         <div class="col-md-6 mb-3">
             <label class="form-label">Full Name <span class="text-danger">*</span></label>
             <input type="text" name="name" class="form-control @error('name') is-invalid @enderror"
-                value="{{ old('name', $customer->name ?? '') }}" placeholder="Enter full name">
+                value="{{ old('name', isset($customer) ? $customer->getOriginalName() : '') }}" placeholder="Enter full name">
             @error('name') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
