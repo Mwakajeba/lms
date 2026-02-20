@@ -142,6 +142,22 @@ class Customer extends Model
         return 20000000;
     }
 
+    /**
+     * Accessor to format customer name in uppercase for display
+     * This ensures consistent formatting across all views
+     */
+    public function getNameAttribute($value)
+    {
+        // Return uppercase version for display, but keep original in database
+        return $value ? strtoupper($value) : $value;
+    }
 
+    /**
+     * Get the original name (before formatting) if needed
+     */
+    public function getOriginalName()
+    {
+        return $this->attributes['name'] ?? null;
+    }
 
 }
