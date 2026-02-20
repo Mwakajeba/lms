@@ -143,17 +143,29 @@ class Customer extends Model
     }
 
     /**
+     * Mutator to store customer name in uppercase in database
+     * This ensures names are always stored in uppercase format
+     */
+    public function setNameAttribute($value)
+    {
+        // Convert to uppercase before storing in database
+        $this->attributes['name'] = $value ? strtoupper(trim($value)) : $value;
+    }
+
+    /**
      * Accessor to format customer name in uppercase for display
      * This ensures consistent formatting across all views
+     * Note: Since we store in uppercase, this mainly ensures consistency
      */
     public function getNameAttribute($value)
     {
-        // Return uppercase version for display, but keep original in database
+        // Return uppercase version for display (already stored as uppercase)
         return $value ? strtoupper($value) : $value;
     }
 
     /**
      * Get the original name (before formatting) if needed
+     * Note: Since we store in uppercase, this returns the stored value
      */
     public function getOriginalName()
     {
