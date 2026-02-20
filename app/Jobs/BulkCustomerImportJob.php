@@ -51,6 +51,7 @@ class BulkCustomerImportJob implements ShouldQueue
         $successCount = 0;
         $errorCount = 0;
         $errors = [];
+        $failedRecords = []; // Store failed records with detailed error information
 
         // Process in chunks
         $chunks = array_chunk($this->rows, $this->chunkSize);
@@ -60,20 +61,39 @@ class BulkCustomerImportJob implements ShouldQueue
             try {
                 foreach ($chunk as $rowIndex => $rowData) {
                     try {
-                        $result = $this->processCustomerRow($rowData, $chunkIndex * $this->chunkSize + $rowIndex + 2);
+                        $rowNumber = $chunkIndex * $this->chunkSize + $rowIndex + 2;
+                        $result = $this->processCustomerRow($rowData, $rowNumber);
                         
                         if ($result['success']) {
                             $successCount++;
                         } else {
                             $errorCount++;
                             $errors[] = $result['error'];
+                            $failedRecords[] = [
+                                'row_number' => $rowNumber,
+                                'data' => $rowData,
+                                'error' => $result['error']
+                            ];
                         }
                     } catch (\Exception $e) {
+                        $rowNumber = $chunkIndex * $this->chunkSize + $rowIndex + 2;
+                        $errorMsg = "Database error: " . $e->getMessage();
                         $errorCount++;
-                        $errors[] = "Row " . ($chunkIndex * $this->chunkSize + $rowIndex + 2) . ": " . $e->getMessage();
-                        Log::error('Error processing customer row', [
-                            'row' => $rowIndex,
-                            'error' => $e->getMessage()
+                        $errors[] = "Row {$rowNumber}: {$errorMsg}";
+                        $failedRecords[] = [
+                            'row_number' => $rowNumber,
+                            'data' => $rowData,
+                            'error' => $errorMsg
+                        ];
+                        
+                        // Log detailed error with full exception details
+                        Log::error('Error processing customer row in job', [
+                            'row_number' => $rowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'phone1' => $rowData['phone1'] ?? 'N/A',
+                            'exception_message' => $e->getMessage(),
+                            'exception_trace' => $e->getTraceAsString(),
+                            'error' => $errorMsg
                         ]);
                     }
                 }
@@ -82,9 +102,21 @@ class BulkCustomerImportJob implements ShouldQueue
                 DB::rollBack();
                 Log::error('Error in bulk customer import chunk', [
                     'chunk' => $chunkIndex,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'exception_trace' => $e->getTraceAsString()
                 ]);
             }
+        }
+        
+        // Store failed records in cache for export (valid for 24 hours)
+        if (!empty($failedRecords)) {
+            $cacheKey = 'failed_customer_records_' . $this->userId . '_' . time();
+            cache()->put($cacheKey, $failedRecords, now()->addHours(24));
+            Log::info('Failed records stored in cache', [
+                'cache_key' => $cacheKey,
+                'failed_count' => count($failedRecords),
+                'user_id' => $this->userId
+            ]);
         }
 
         Log::info('Completed bulk customer import job', [
@@ -100,36 +132,83 @@ class BulkCustomerImportJob implements ShouldQueue
     {
         // Validate required fields
         if (empty($rowData['name']) || empty($rowData['phone1']) || empty($rowData['dob']) || empty($rowData['sex'])) {
+            $missingFields = [];
+            if (empty($rowData['name'])) $missingFields[] = 'name';
+            if (empty($rowData['phone1'])) $missingFields[] = 'phone1';
+            if (empty($rowData['dob'])) $missingFields[] = 'dob';
+            if (empty($rowData['sex'])) $missingFields[] = 'sex';
+            
+            $errorMsg = "Row {$rowNumber}: Missing required fields: " . implode(', ', $missingFields);
+            
+            Log::warning('Customer bulk upload validation failed in job', [
+                'row_number' => $rowNumber,
+                'customer_name' => $rowData['name'] ?? 'N/A',
+                'phone1' => $rowData['phone1'] ?? 'N/A',
+                'error' => $errorMsg,
+                'missing_fields' => $missingFields
+            ]);
+            
             return [
                 'success' => false,
-                'error' => "Row {$rowNumber}: Missing required fields"
+                'error' => $errorMsg
             ];
         }
 
         // Validate sex
         $sex = strtoupper(trim($rowData['sex']));
         if (!in_array($sex, ['M', 'F'])) {
+            $errorMsg = "Row {$rowNumber}: Sex must be M or F (got: {$rowData['sex']})";
+            
+            Log::warning('Customer bulk upload validation failed in job - invalid sex', [
+                'row_number' => $rowNumber,
+                'customer_name' => $rowData['name'] ?? 'N/A',
+                'phone1' => $rowData['phone1'] ?? 'N/A',
+                'sex_provided' => $rowData['sex'] ?? 'empty',
+                'error' => $errorMsg
+            ]);
+            
             return [
                 'success' => false,
-                'error' => "Row {$rowNumber}: Sex must be M or F (got: {$rowData['sex']})"
+                'error' => $errorMsg
             ];
         }
 
         // Format and validate phone number
         $formattedPhone1 = $this->formatPhoneNumber(trim($rowData['phone1']));
         if (!str_starts_with($formattedPhone1, '255')) {
+            $errorMsg = "Row {$rowNumber}: Phone number must start with prefix 255 (provided: {$formattedPhone1})";
+            
+            Log::warning('Customer bulk upload validation failed in job - invalid phone prefix', [
+                'row_number' => $rowNumber,
+                'customer_name' => $rowData['name'] ?? 'N/A',
+                'phone1_original' => $rowData['phone1'] ?? 'N/A',
+                'phone1_formatted' => $formattedPhone1,
+                'error' => $errorMsg
+            ]);
+            
             return [
                 'success' => false,
-                'error' => "Row {$rowNumber}: Phone number must start with prefix 255"
+                'error' => $errorMsg
             ];
         }
 
         // Validate phone number uniqueness
         $existingCustomer = Customer::where('phone1', $formattedPhone1)->first();
         if ($existingCustomer) {
+            $errorMsg = "Row {$rowNumber}: Phone number already exists: {$formattedPhone1} (Customer ID: {$existingCustomer->id}, Name: {$existingCustomer->name})";
+            
+            Log::warning('Customer bulk upload validation failed in job - duplicate phone', [
+                'row_number' => $rowNumber,
+                'customer_name' => $rowData['name'] ?? 'N/A',
+                'phone1' => $formattedPhone1,
+                'existing_customer_id' => $existingCustomer->id,
+                'existing_customer_name' => $existingCustomer->name,
+                'error' => $errorMsg
+            ]);
+            
             return [
                 'success' => false,
-                'error' => "Row {$rowNumber}: Phone number already exists: {$formattedPhone1}"
+                'error' => $errorMsg
             ];
         }
 
@@ -138,15 +217,35 @@ class BulkCustomerImportJob implements ShouldQueue
             $dob = Carbon::parse($rowData['dob']);
             $age = $dob->age;
             if ($age < 18) {
+                $errorMsg = "Row {$rowNumber}: Customer must be at least 18 years old (DOB: {$rowData['dob']}, Age: {$age})";
+                
+                Log::warning('Customer bulk upload validation failed in job - age requirement', [
+                    'row_number' => $rowNumber,
+                    'customer_name' => $rowData['name'] ?? 'N/A',
+                    'dob' => $rowData['dob'],
+                    'age' => $age,
+                    'error' => $errorMsg
+                ]);
+                
                 return [
                     'success' => false,
-                    'error' => "Row {$rowNumber}: Customer must be at least 18 years old (DOB: {$rowData['dob']}, Age: {$age})"
+                    'error' => $errorMsg
                 ];
             }
         } catch (\Exception $e) {
+            $errorMsg = "Row {$rowNumber}: Invalid date of birth format: {$rowData['dob']} - " . $e->getMessage();
+            
+            Log::warning('Customer bulk upload validation failed in job - invalid DOB format', [
+                'row_number' => $rowNumber,
+                'customer_name' => $rowData['name'] ?? 'N/A',
+                'dob_provided' => $rowData['dob'] ?? 'empty',
+                'exception_message' => $e->getMessage(),
+                'error' => $errorMsg
+            ]);
+            
             return [
                 'success' => false,
-                'error' => "Row {$rowNumber}: Invalid date of birth format: {$rowData['dob']}"
+                'error' => $errorMsg
             ];
         }
 
@@ -157,9 +256,19 @@ class BulkCustomerImportJob implements ShouldQueue
         if (!empty($rowData['region'])) {
             $region = Region::where('name', trim($rowData['region']))->first();
             if (!$region) {
+                $errorMsg = "Row {$rowNumber}: Invalid region: {$rowData['region']}. Region must exist in the system.";
+                
+                Log::warning('Customer bulk upload validation failed in job - invalid region', [
+                    'row_number' => $rowNumber,
+                    'customer_name' => $rowData['name'] ?? 'N/A',
+                    'region_provided' => $rowData['region'],
+                    'available_regions' => Region::pluck('name')->toArray(),
+                    'error' => $errorMsg
+                ]);
+                
                 return [
                     'success' => false,
-                    'error' => "Row {$rowNumber}: Invalid region: {$rowData['region']}. Region must exist in the system."
+                    'error' => $errorMsg
                 ];
             }
             $regionId = $region->id;
@@ -169,9 +278,22 @@ class BulkCustomerImportJob implements ShouldQueue
                     ->where('region_id', $regionId)
                     ->first();
                 if (!$district) {
+                    $errorMsg = "Row {$rowNumber}: Invalid district: {$rowData['district']} for region {$rowData['region']}";
+                    $availableDistricts = District::where('region_id', $regionId)->pluck('name')->toArray();
+                    
+                    Log::warning('Customer bulk upload validation failed in job - invalid district', [
+                        'row_number' => $rowNumber,
+                        'customer_name' => $rowData['name'] ?? 'N/A',
+                        'region' => $rowData['region'],
+                        'region_id' => $regionId,
+                        'district_provided' => $rowData['district'],
+                        'available_districts' => $availableDistricts,
+                        'error' => $errorMsg
+                    ]);
+                    
                     return [
                         'success' => false,
-                        'error' => "Row {$rowNumber}: Invalid district: {$rowData['district']} for region {$rowData['region']}"
+                        'error' => $errorMsg
                     ];
                 }
                 $districtId = $district->id;

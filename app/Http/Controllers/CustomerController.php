@@ -913,13 +913,29 @@ class CustomerController extends Controller
                         empty($rowData['name']) || empty($rowData['phone1']) || empty($rowData['dob']) ||
                         empty($rowData['sex'])
                     ) {
-                        $errorMsg = "Missing required fields (name, phone1, dob, or sex is empty)";
+                        $missingFields = [];
+                        if (empty($rowData['name'])) $missingFields[] = 'name';
+                        if (empty($rowData['phone1'])) $missingFields[] = 'phone1';
+                        if (empty($rowData['dob'])) $missingFields[] = 'dob';
+                        if (empty($rowData['sex'])) $missingFields[] = 'sex';
+                        
+                        $errorMsg = "Missing required fields: " . implode(', ', $missingFields);
                         $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                         $failedRecords[] = [
                             'row_number' => $actualRowNumber,
                             'data' => $originalRowData,
                             'error' => $errorMsg
                         ];
+                        
+                        // Log detailed error
+                        Log::warning('Customer bulk upload validation failed', [
+                            'row_number' => $actualRowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'phone1' => $rowData['phone1'] ?? 'N/A',
+                            'error' => $errorMsg,
+                            'missing_fields' => $missingFields
+                        ]);
+                        
                         $errorCount++;
                         continue;
                     }
@@ -934,6 +950,16 @@ class CustomerController extends Controller
                             'data' => $originalRowData,
                             'error' => $errorMsg
                         ];
+                        
+                        // Log detailed error
+                        Log::warning('Customer bulk upload validation failed - invalid sex', [
+                            'row_number' => $actualRowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'phone1' => $rowData['phone1'] ?? 'N/A',
+                            'sex_provided' => $rowData['sex'] ?? 'empty',
+                            'error' => $errorMsg
+                        ]);
+                        
                         $errorCount++;
                         continue;
                     }
@@ -943,13 +969,23 @@ class CustomerController extends Controller
                     
                     // Validate phone number prefix
                     if (!str_starts_with($formattedPhone1, '255')) {
-                        $errorMsg = "Phone number must start with prefix 255";
+                        $errorMsg = "Phone number must start with prefix 255 (provided: {$formattedPhone1})";
                         $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                         $failedRecords[] = [
                             'row_number' => $actualRowNumber,
                             'data' => $originalRowData,
                             'error' => $errorMsg
                         ];
+                        
+                        // Log detailed error
+                        Log::warning('Customer bulk upload validation failed - invalid phone prefix', [
+                            'row_number' => $actualRowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'phone1_original' => $rowData['phone1'] ?? 'N/A',
+                            'phone1_formatted' => $formattedPhone1,
+                            'error' => $errorMsg
+                        ]);
+                        
                         $errorCount++;
                         continue;
                     }
@@ -957,13 +993,24 @@ class CustomerController extends Controller
                     // Validate phone number uniqueness
                     $existingCustomer = Customer::where('phone1', $formattedPhone1)->first();
                     if ($existingCustomer) {
-                        $errorMsg = "Phone number already exists";
+                        $errorMsg = "Phone number already exists (Customer ID: {$existingCustomer->id}, Name: {$existingCustomer->name})";
                         $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                         $failedRecords[] = [
                             'row_number' => $actualRowNumber,
                             'data' => $originalRowData,
                             'error' => $errorMsg
                         ];
+                        
+                        // Log detailed error
+                        Log::warning('Customer bulk upload validation failed - duplicate phone', [
+                            'row_number' => $actualRowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'phone1' => $formattedPhone1,
+                            'existing_customer_id' => $existingCustomer->id,
+                            'existing_customer_name' => $existingCustomer->name,
+                            'error' => $errorMsg
+                        ]);
+                        
                         $errorCount++;
                         continue;
                     }
@@ -978,13 +1025,24 @@ class CustomerController extends Controller
                                 ->first();
                             
                             if ($existingId) {
-                                $errorMsg = "ID number already exists";
+                                $errorMsg = "ID number already exists (Customer ID: {$existingId->id}, Name: {$existingId->name})";
                                 $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                                 $failedRecords[] = [
                                     'row_number' => $actualRowNumber,
                                     'data' => $originalRowData,
                                     'error' => $errorMsg
                                 ];
+                                
+                                // Log detailed error
+                                Log::warning('Customer bulk upload validation failed - duplicate ID number', [
+                                    'row_number' => $actualRowNumber,
+                                    'customer_name' => $rowData['name'] ?? 'N/A',
+                                    'id_number' => $idNumber,
+                                    'existing_customer_id' => $existingId->id,
+                                    'existing_customer_name' => $existingId->name,
+                                    'error' => $errorMsg
+                                ]);
+                                
                                 $errorCount++;
                                 continue;
                             }
@@ -1003,17 +1061,37 @@ class CustomerController extends Controller
                                 'data' => $originalRowData,
                                 'error' => $errorMsg
                             ];
+                            
+                            // Log detailed error
+                            Log::warning('Customer bulk upload validation failed - age requirement', [
+                                'row_number' => $actualRowNumber,
+                                'customer_name' => $rowData['name'] ?? 'N/A',
+                                'dob' => $rowData['dob'],
+                                'age' => $age,
+                                'error' => $errorMsg
+                            ]);
+                            
                             $errorCount++;
                             continue;
                         }
                     } catch (\Exception $e) {
-                        $errorMsg = "Invalid date of birth format: " . ($rowData['dob'] ?? 'empty');
+                        $errorMsg = "Invalid date of birth format: " . ($rowData['dob'] ?? 'empty') . " - " . $e->getMessage();
                         $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                         $failedRecords[] = [
                             'row_number' => $actualRowNumber,
                             'data' => $originalRowData,
                             'error' => $errorMsg
                         ];
+                        
+                        // Log detailed error
+                        Log::warning('Customer bulk upload validation failed - invalid DOB format', [
+                            'row_number' => $actualRowNumber,
+                            'customer_name' => $rowData['name'] ?? 'N/A',
+                            'dob_provided' => $rowData['dob'] ?? 'empty',
+                            'exception_message' => $e->getMessage(),
+                            'error' => $errorMsg
+                        ]);
+                        
                         $errorCount++;
                         continue;
                     }
@@ -1032,6 +1110,16 @@ class CustomerController extends Controller
                                 'data' => $originalRowData,
                                 'error' => $errorMsg
                             ];
+                            
+                            // Log detailed error
+                            Log::warning('Customer bulk upload validation failed - invalid region', [
+                                'row_number' => $actualRowNumber,
+                                'customer_name' => $rowData['name'] ?? 'N/A',
+                                'region_provided' => $rowData['region'],
+                                'available_regions' => Region::pluck('name')->toArray(),
+                                'error' => $errorMsg
+                            ]);
+                            
                             $errorCount++;
                             continue;
                         }
@@ -1049,6 +1137,19 @@ class CustomerController extends Controller
                                     'data' => $originalRowData,
                                     'error' => $errorMsg
                                 ];
+                                
+                                // Log detailed error
+                                $availableDistricts = District::where('region_id', $regionId)->pluck('name')->toArray();
+                                Log::warning('Customer bulk upload validation failed - invalid district', [
+                                    'row_number' => $actualRowNumber,
+                                    'customer_name' => $rowData['name'] ?? 'N/A',
+                                    'region' => $rowData['region'],
+                                    'region_id' => $regionId,
+                                    'district_provided' => $rowData['district'],
+                                    'available_districts' => $availableDistricts,
+                                    'error' => $errorMsg
+                                ]);
+                                
                                 $errorCount++;
                                 continue;
                             }
@@ -1065,6 +1166,15 @@ class CustomerController extends Controller
                                 'data' => $originalRowData,
                                 'error' => $errorMsg
                             ];
+                            
+                            // Log detailed error
+                            Log::warning('Customer bulk upload validation failed - invalid region_id', [
+                                'row_number' => $actualRowNumber,
+                                'customer_name' => $rowData['name'] ?? 'N/A',
+                                'region_id_provided' => $rowData['region_id'],
+                                'error' => $errorMsg
+                            ]);
+                            
                             $errorCount++;
                             continue;
                         }
@@ -1082,6 +1192,18 @@ class CustomerController extends Controller
                                     'data' => $originalRowData,
                                     'error' => $errorMsg
                                 ];
+                                
+                                // Log detailed error
+                                $availableDistricts = District::where('region_id', $regionId)->pluck('name', 'id')->toArray();
+                                Log::warning('Customer bulk upload validation failed - invalid district_id', [
+                                    'row_number' => $actualRowNumber,
+                                    'customer_name' => $rowData['name'] ?? 'N/A',
+                                    'region_id' => $regionId,
+                                    'district_id_provided' => $rowData['district_id'],
+                                    'available_districts' => $availableDistricts,
+                                    'error' => $errorMsg
+                                ]);
+                                
                                 $errorCount++;
                                 continue;
                             }
@@ -1142,13 +1264,24 @@ class CustomerController extends Controller
                     $successCount++;
                 } catch (\Exception $e) {
                     $actualRowNumber = $originalRowData['_row_number'] ?? ($rowIndex + 2);
-                    $errorMsg = $e->getMessage();
+                    $errorMsg = "Database error: " . $e->getMessage();
                     $errors[] = "Row {$actualRowNumber}: {$errorMsg}";
                     $failedRecords[] = [
                         'row_number' => $actualRowNumber,
                         'data' => $originalRowData,
                         'error' => $errorMsg
                     ];
+                    
+                    // Log detailed error with full exception details
+                    Log::error('Customer bulk upload failed - exception', [
+                        'row_number' => $actualRowNumber,
+                        'customer_name' => $originalRowData['name'] ?? 'N/A',
+                        'phone1' => $originalRowData['phone1'] ?? 'N/A',
+                        'exception_message' => $e->getMessage(),
+                        'exception_trace' => $e->getTraceAsString(),
+                        'error' => $errorMsg
+                    ]);
+                    
                     $errorCount++;
                 }
             }
@@ -1157,6 +1290,21 @@ class CustomerController extends Controller
                 DB::rollBack();
                 // Store failed records in session for export
                 session(['failed_customer_records' => $failedRecords]);
+                
+                // Also store in cache with a user-specific key for easier retrieval
+                $cacheKey = 'failed_customer_records_' . auth()->id() . '_' . time();
+                cache()->put($cacheKey, $failedRecords, now()->addHours(24));
+                
+                // Log summary of failures
+                Log::info('Customer bulk upload completed with errors', [
+                    'user_id' => auth()->id(),
+                    'total_rows' => count($processedRows),
+                    'success_count' => $successCount,
+                    'error_count' => $errorCount,
+                    'failed_records_count' => count($failedRecords),
+                    'cache_key' => $cacheKey
+                ]);
+                
                 return back()
                     ->withErrors(['csv_file' => 'Upload completed with errors. ' . $errorCount . ' rows failed.'])
                     ->with('upload_errors', $errors)
@@ -1181,13 +1329,47 @@ class CustomerController extends Controller
     // Export failed customer records
     public function exportFailedRecords()
     {
+        // First check session (for synchronous uploads)
         $failedRecords = session('failed_customer_records', []);
         
+        // If no session records, check cache for queued job records
         if (empty($failedRecords)) {
-            return back()->withErrors(['error' => 'No failed records to export.']);
+            // Try to find the most recent cache key for this user
+            $userId = auth()->id();
+            
+            // Get all cache keys matching the pattern
+            // We'll check recent timestamps (last 24 hours worth)
+            $allKeys = [];
+            $currentTime = time();
+            for ($i = 0; $i < 86400; $i += 60) { // Check every minute for last 24 hours
+                $key = 'failed_customer_records_' . $userId . '_' . ($currentTime - $i);
+                if (cache()->has($key)) {
+                    $allKeys[] = $key;
+                }
+            }
+            
+            // Get the most recent one (first in array since we're going backwards)
+            if (!empty($allKeys)) {
+                $latestKey = $allKeys[0];
+                $failedRecords = cache()->get($latestKey, []);
+                Log::info('Retrieved failed records from cache', [
+                    'cache_key' => $latestKey,
+                    'failed_records_count' => count($failedRecords)
+                ]);
+            }
+        }
+        
+        if (empty($failedRecords)) {
+            return back()->withErrors(['error' => 'No failed records to export. Please upload a file with errors first.']);
         }
 
         $filename = 'failed_customer_records_' . date('Y-m-d_His') . '.xlsx';
+        
+        Log::info('Exporting failed customer records', [
+            'user_id' => auth()->id(),
+            'failed_records_count' => count($failedRecords),
+            'filename' => $filename
+        ]);
         
         return Excel::download(new FailedCustomerRecordsExport($failedRecords), $filename);
     }
